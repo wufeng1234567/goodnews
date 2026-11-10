@@ -68,6 +68,7 @@ D:\goodnews
 │  ├─ src/components/            # 裁决卡、主张、证据、图谱、轨迹等
 │  └─ package.json
 ├─ scripts/                       # Windows .bat 启动/停止/种子脚本（ASCII）
+├─ assets/                        # goodnews.ico 桌面快捷方式图标
 ├─ docs/architecture.md           # 架构图、分层、约束
 ├─ docker-compose.yml             # 只新增 Neo4j；复用现有 PostgreSQL/Redis
 ├─ .env / .env.example            # 真实密钥只在 .env，且被 .gitignore 忽略
@@ -122,7 +123,19 @@ npm run dev
 
 打开 <http://127.0.0.1:5173>。Vite 已把 `/api` 代理到 `127.0.0.1:8000`。
 
-### 一键启动
+### 桌面一键启动（推荐）
+
+桌面上已创建快捷方式：**`goodnews - Start`**
+
+完整路径：`C:\Users\liu\Desktop\goodnews - Start.lnk`
+
+- 目标：`D:\goodnews\scripts\start-all.bat`
+- 工作目录：`D:\goodnews`
+- 专属图标：`D:\goodnews\assets\goodnews.ico`
+- 行为：自动检查/启动 Docker Desktop 与 Neo4j；跳过已运行的后端/前端；等待 Web 页面可访问后自动打开 <http://127.0.0.1:5173>。
+- 需要重建快捷方式时，双击 [scripts/create-desktop-shortcut.bat](scripts/create-desktop-shortcut.bat)。
+
+### 命令行一键启动
 
 双击 `scripts\start-all.bat`：启动 Neo4j、后端、前端，并打开浏览器。
 单独脚本：`start-backend.bat`、`start-frontend.bat`、`start-neo4j.bat`、`seed-graph.bat`。
