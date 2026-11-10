@@ -1,0 +1,115 @@
+/* Global design tokens and reset only. Component styles stay scoped. */
+:root {
+  --gn-paper: #f4efe5;
+  --gn-paper-deep: #ebe3d4;
+  --gn-card: #fffdf8;
+  --gn-ink: #1c1915;
+  --gn-ink-soft: #4a443c;
+  --gn-muted: #857b6e;
+  --gn-border: #ded5c6;
+  --gn-accent: #b8422d;
+  --gn-accent-soft: #f2ded7;
+  --gn-sage: #3f6b54;
+  --gn-sage-soft: #e0ebe3;
+  --gn-gold: #9a6c25;
+  --gn-gold-soft: #f1e7d1;
+  --gn-shadow: 0 24px 70px rgba(76, 57, 34, 0.1);
+  --gn-serif: 'Noto Serif SC', 'Songti SC', 'STSong', Georgia, serif;
+  --gn-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+
+  --el-color-primary: #b8422d;
+  --el-color-primary-light-3: #ce7967;
+  --el-color-primary-light-5: #dea295;
+  --el-color-primary-light-7: #eecbc3;
+  --el-color-primary-light-8: #f4ded9;
+  --el-color-primary-light-9: #faf0ed;
+  --el-color-primary-dark-2: #913422;
+  --el-color-success: #3f6b54;
+  --el-color-warning: #9a6c25;
+  --el-color-danger: #a93b2b;
+  --el-font-family: var(--gn-sans);
+  --el-border-radius-base: 10px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--gn-paper);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  color: var(--gn-ink);
+  background:
+    radial-gradient(circle at 12% -8%, rgba(184, 66, 45, 0.09), transparent 34%),
+    radial-gradient(circle at 92% 4%, rgba(63, 107, 84, 0.08), transparent 28%),
+    var(--gn-paper);
+  font-family: var(--gn-sans);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: var(--gn-accent-soft);
+  color: var(--gn-ink);
+}
+
+.gn-container {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.gn-card {
+  background: rgba(255, 253, 248, 0.92);
+  border: 1px solid var(--gn-border);
+  border-radius: 20px;
+  box-shadow: 0 12px 36px rgba(76, 57, 34, 0.06);
+}
+
+.gn-eyebrow {
+  margin: 0;
+  color: var(--gn-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.gn-serif {
+  font-family: var(--gn-serif);
+}
+
+.gn-muted {
+  color: var(--gn-muted);
+}
+
+.el-button--primary {
+  --el-button-font-weight: 700;
+}
+
+.el-button {
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 14px;
+  }
+}

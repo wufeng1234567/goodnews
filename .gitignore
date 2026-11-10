@@ -1,0 +1,53 @@
+# ===== Secrets (never commit) =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+.credentials/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+backend/.venv/
+backend/build/
+backend/dist/
+backend/*.egg-info/
+*.egg-info/
+
+# ===== Node / Vue =====
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env.local
+frontend/.env.*.local
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# ===== Crawler output =====
+*.log
+scrapy.cfg.bak
+crawler-output/
+tmp/
+.tmp/
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ===== Local data =====
+data/
+uploads/
+neo4j-data/
