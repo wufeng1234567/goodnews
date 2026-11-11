@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     social_max_comments_default: int = 30
     social_login_timeout_seconds: int = 600
     social_keepalive_hours: int = 6
-    social_full_max_comments: int = 50_000
+    social_full_max_comments: int = 100_000
     # Optional raw Cookie headers. Prefer the login helper which writes a
     # Playwright storage-state file; these values are only for deployment.
     xhs_cookie: SecretStr = SecretStr("")

@@ -36,6 +36,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 - ✅ 三平台网页内登录、退出、切换账号、登录态持久化与过期检测
 - ✅ 后台全量评论任务、Excel/Markdown/TXT 导出、B 站楼中楼分页
 - ✅ 历史采集记录可回放：保存输入网址、标题、评论数和时间，并提供“重新获取”
+- ✅ Bilibili 主评论连续分页（1000 条实测通过），支持完整楼中楼
 - ✅ 子回复超过 3 条自动折叠，点击打开固定高度“完整父评论 + 子回复”弹窗
 - ✅ PostgreSQL 持久化核查与社媒采集快照；pgvector 仅建占位表不使用
 - ✅ Redis 仅作搜索缓存
@@ -239,7 +240,7 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 
 登录态只存在本机，目录已 gitignore。社媒采集会写入 PostgreSQL 的 `social_fetch_records` 快照表。
 
-评论采集的原理、实测和不可行方案记录在 [社媒评论全量采集方案](docs/social-comment-strategy.md)。
+评论采集的原理、实测和不可行方案记录在 [社媒完整评论技术方案与实验计划](docs/social-comment-full-plan.md)。
 
 ### 全量评论与导出
 
@@ -252,7 +253,7 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
   - **Excel (.xlsx)**：内容信息 + 评论明细，包含父子评论、层级、点赞、回复数、时间。
   - **Markdown (.md)**：适合阅读与归档。
   - **纯文本 (.txt)**：便于后处理。
-- 硬上限由 `SOCIAL_FULL_MAX_COMMENTS` 控制，默认 50,000；任务运行在应用进程内的后台任务器，不依赖 Celery（0.0.2 MVP）。
+- 硬上限由 `SOCIAL_FULL_MAX_COMMENTS` 控制，默认 100,000；任务运行在应用进程内的后台任务器，不依赖 Celery（0.0.2 MVP）。
 
 ### 历史采集记录
 

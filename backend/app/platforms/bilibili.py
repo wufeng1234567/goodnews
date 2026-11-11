@@ -122,7 +122,7 @@ class BilibiliAdapter:
                 logger.warning("Bilibili comments failed: %s", exc)
                 warnings.append(f"评论获取失败：{exc}")
 
-            effective_max = request.max_comments or 50_000
+            effective_max = request.max_comments or 100_000
             declared_comments = content.metrics.comment_count or 0
             if declared_comments > len(comments) and len(comments) < effective_max:
                 warnings.append(
@@ -154,11 +154,12 @@ class BilibiliAdapter:
         for each root comment. The legacy top-level response only includes the
         first 3 nested replies, which is why the UI previously looked truncated.
         """
-        target = max_comments or 50_000
+        target = max_comments or 100_000
         # Keep a quick preview useful: a single viral comment can have
         # hundreds of replies. Full jobs (target > 200) fetch every reply.
         nested_cap = 5 if max_comments and max_comments <= 200 else None
         comments: list[SocialComment] = []
+        seen_top_ids: set[str] = set()
         page_number = 1
         total_count = 0
         page_size = 20
@@ -179,9 +180,19 @@ class BilibiliAdapter:
             replies = data.get("replies") or []
             if not replies:
                 break
-            for raw in replies:
+            new_replies = [
+                raw
+                for raw in replies
+                if str(raw.get("rpid") or raw.get("rpid_str") or "") not in seen_top_ids
+            ]
+            if not new_replies:
+                break
+            for raw in new_replies:
                 if count_comment_tree(comments) >= target:
                     break
+                raw_id = str(raw.get("rpid") or raw.get("rpid_str") or "")
+                if raw_id:
+                    seen_top_ids.add(raw_id)
                 comment = parse_bilibili_comment(raw, content_id=str(aid))
                 reply_count = parse_count(raw.get("rcount") or raw.get("count"))
                 if include_replies and reply_count:
@@ -194,8 +205,6 @@ class BilibiliAdapter:
                         )
                         comment = comment.model_copy(update={"replies": sub_comments})
                 comments.append(comment)
-            if len(replies) < page_size:
-                break
             page_number += 1
             await asyncio.sleep(0.15)
 
@@ -206,7 +215,7 @@ class BilibiliAdapter:
         *,
         content_id: str,
         root_id: str,
-        max_comments: int = 50_000,
+        max_comments: int = 100_000,
     ) -> list[SocialComment]:
         """Fetch the complete reply tree for one Bilibili root comment."""
         video_id = self.extract_video_id(content_id)
@@ -235,6 +244,7 @@ class BilibiliAdapter:
     ) -> list[SocialComment]:
         """Fetch all pages of replies for one root comment."""
         out: list[SocialComment] = []
+        seen_reply_ids: set[str] = set()
         page_number = 1
         page_size = 20
         while len(out) < limit:
@@ -255,9 +265,19 @@ class BilibiliAdapter:
             replies = data.get("replies") or []
             if not replies:
                 break
-            for raw in replies:
+            new_replies = [
+                raw
+                for raw in replies
+                if str(raw.get("rpid") or raw.get("rpid_str") or "") not in seen_reply_ids
+            ]
+            if not new_replies:
+                break
+            for raw in new_replies:
                 if len(out) >= limit:
                     break
+                raw_id = str(raw.get("rpid") or raw.get("rpid_str") or "")
+                if raw_id:
+                    seen_reply_ids.add(raw_id)
                 out.append(
                     parse_bilibili_comment(
                         raw,
@@ -265,7 +285,7 @@ class BilibiliAdapter:
                         parent_id=root_id,
                     )
                 )
-            if len(replies) < page_size or len(out) >= total:
+            if len(out) >= total:
                 break
             page_number += 1
             await asyncio.sleep(0.12)

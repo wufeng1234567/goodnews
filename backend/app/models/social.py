@@ -100,7 +100,7 @@ class SocialFetchRequest(BaseModel):
     url: str = Field(min_length=5, max_length=2_000)
     # 0 means "full collection" for the background job; quick previews use
     # small positive values. The job service enforces a hard safety ceiling.
-    max_comments: int = Field(default=30, ge=0, le=50_000)
+    max_comments: int = Field(default=30, ge=0, le=100_000)
     include_replies: bool = True
 
     @field_validator("url")
@@ -180,7 +180,7 @@ class SocialJobCreateRequest(BaseModel):
     url: str = Field(min_length=5, max_length=2_000)
     include_replies: bool = True
     # 0 means all available comments, bounded by the server ceiling.
-    max_comments: int = Field(default=0, ge=0, le=50_000)
+    max_comments: int = Field(default=0, ge=0, le=100_000)
 
     @field_validator("url")
     @classmethod

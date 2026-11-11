@@ -38,7 +38,7 @@ class SocialJobService:
         social_service: SocialService,
         job_repo: SocialJobRepository,
         record_repo: SocialFetchRepository,
-        max_full_comments: int = 50_000,
+        max_full_comments: int = 100_000,
     ) -> None:
         self._social_service = social_service
         self._job_repo = job_repo
