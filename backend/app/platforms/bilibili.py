@@ -155,6 +155,9 @@ class BilibiliAdapter:
         first 3 nested replies, which is why the UI previously looked truncated.
         """
         target = max_comments or 50_000
+        # Keep a quick preview useful: a single viral comment can have
+        # hundreds of replies. Full jobs (target > 200) fetch every reply.
+        nested_cap = 5 if max_comments and max_comments <= 200 else None
         comments: list[SocialComment] = []
         page_number = 1
         total_count = 0
@@ -183,6 +186,8 @@ class BilibiliAdapter:
                 reply_count = parse_count(raw.get("rcount") or raw.get("count"))
                 if include_replies and reply_count:
                     remaining = target - count_comment_tree(comments) - 1
+                    if nested_cap is not None:
+                        remaining = min(remaining, nested_cap)
                     if remaining > 0:
                         sub_comments = await self._fetch_sub_replies(
                             client, aid, comment.id, remaining
