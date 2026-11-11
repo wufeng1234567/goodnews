@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -86,6 +87,29 @@ async def open_browser_page(
             yield page
         finally:
             await browser.close()
+
+
+def storage_state_cookie_header(settings: Settings, platform: SocialPlatform) -> str:
+    """Return a Cookie header from a saved Playwright storage state file."""
+    path = storage_state_path(settings, platform)
+    if not path.exists():
+        return ""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    cookies = payload.get("cookies") or []
+    pairs = [
+        f"{cookie['name']}={cookie['value']}"
+        for cookie in cookies
+        if isinstance(cookie, dict) and cookie.get("name") and cookie.get("value") is not None
+    ]
+    return "; ".join(pairs)
+
+
+def cookie_header(settings: Settings, platform: SocialPlatform) -> str:
+    """Storage state takes precedence over an optional deployment Cookie env."""
+    return storage_state_cookie_header(settings, platform) or _cookie_header(settings, platform)
 
 
 def auth_mode(settings: Settings, platform: SocialPlatform) -> str:

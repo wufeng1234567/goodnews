@@ -28,6 +28,7 @@ from app.platforms.base import (
     resolve_short_url,
     timestamp_to_datetime,
 )
+from app.platforms.browser import cookie_header
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ class BilibiliAdapter:
             "Referer": "https://www.bilibili.com/",
             "Accept": "application/json, text/plain, */*",
         }
-        cookie = self._settings.bilibili_cookie.get_secret_value().strip()
+        cookie = cookie_header(self._settings, SocialPlatform.BILIBILI)
         if cookie:
             headers["Cookie"] = cookie
         return headers
@@ -135,7 +136,7 @@ class BilibiliAdapter:
             total_comments_fetched=count_comment_tree(comments),
             has_more=has_more,
             collection_method="public_api",
-            auth_mode="cookie" if self._settings.bilibili_cookie.get_secret_value() else "none",
+            auth_mode="cookie" if cookie_header(self._settings, SocialPlatform.BILIBILI) else "none",
             warnings=warnings,
         )
 

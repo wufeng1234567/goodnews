@@ -132,3 +132,32 @@ class SocialPlatformInfo(BaseModel):
 
 class SocialPlatformListResponse(BaseModel):
     platforms: list[SocialPlatformInfo]
+
+
+class SocialAuthState(str, Enum):
+    NOT_LOGGED_IN = "not_logged_in"
+    WAITING = "waiting"
+    LOGGED_IN = "logged_in"
+    EXPIRED = "expired"
+    FAILED = "failed"
+
+
+class SocialAuthStatus(BaseModel):
+    platform: SocialPlatform
+    state: SocialAuthState
+    logged_in: bool = False
+    account_name: str | None = None
+    message: str = ""
+    expires_at: datetime | None = None
+    last_login_at: datetime | None = None
+    last_checked_at: datetime | None = None
+    last_refreshed_at: datetime | None = None
+    auto_refresh: bool = True
+
+
+class SocialAuthStatusListResponse(BaseModel):
+    statuses: list[SocialAuthStatus]
+
+
+class SocialAuthActionRequest(BaseModel):
+    platform: SocialPlatform

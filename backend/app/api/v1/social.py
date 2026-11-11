@@ -1,4 +1,4 @@
-"""Social-platform content and comment ingestion routes."""
+"""Social-platform content, comment and account-session routes."""
 
 from __future__ import annotations
 
@@ -6,6 +6,9 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.deps import ContainerDep
 from app.models.social import (
+    SocialAuthActionRequest,
+    SocialAuthStatus,
+    SocialAuthStatusListResponse,
     SocialFetchRequest,
     SocialFetchResponse,
     SocialPlatformListResponse,
@@ -36,6 +39,35 @@ def _error_detail(exc: SocialPlatformError) -> dict[str, str]:
 @router.get("/platforms", response_model=SocialPlatformListResponse)
 async def social_platforms(container: ContainerDep) -> SocialPlatformListResponse:
     return container.social_service.platform_list()
+
+
+@router.get("/auth/status", response_model=SocialAuthStatusListResponse)
+async def social_auth_status(container: ContainerDep) -> SocialAuthStatusListResponse:
+    return container.social_auth_manager.status_all()
+
+
+@router.post("/auth/login", response_model=SocialAuthStatus)
+async def social_auth_login(
+    payload: SocialAuthActionRequest,
+    container: ContainerDep,
+) -> SocialAuthStatus:
+    return await container.social_auth_manager.start_login(payload.platform)
+
+
+@router.post("/auth/logout", response_model=SocialAuthStatus)
+async def social_auth_logout(
+    payload: SocialAuthActionRequest,
+    container: ContainerDep,
+) -> SocialAuthStatus:
+    return await container.social_auth_manager.logout(payload.platform)
+
+
+@router.post("/auth/refresh", response_model=SocialAuthStatus)
+async def social_auth_refresh(
+    payload: SocialAuthActionRequest,
+    container: ContainerDep,
+) -> SocialAuthStatus:
+    return await container.social_auth_manager.refresh(payload.platform)
 
 
 @router.post("/fetch", response_model=SocialFetchResponse)

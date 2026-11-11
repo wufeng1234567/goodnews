@@ -5,7 +5,9 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import PlatformBadge from '@/components/PlatformBadge.vue'
 import SocialCommentList from '@/components/SocialCommentList.vue'
 import SocialContentCard from '@/components/SocialContentCard.vue'
+import { useSocialAuth } from '@/composables/useSocialAuth'
 import { useSocialFetch } from '@/composables/useSocialFetch'
+import type { SocialAuthStatus, SocialPlatform } from '@/types'
 
 const url = ref('')
 const maxComments = ref(30)
@@ -19,6 +21,67 @@ const {
   loadPlatforms,
   submit,
 } = useSocialFetch()
+const {
+  statusMap: authStatusMap,
+  actionPlatform: authActionPlatform,
+  error: authError,
+  notice: authNotice,
+  login: loginPlatform,
+  logout: logoutPlatform,
+  switchAccount,
+} = useSocialAuth()
+
+const authLabels: Record<SocialAuthStatus['state'], string> = {
+  not_logged_in: '未登录',
+  waiting: '等待登录',
+  logged_in: '已登录',
+  expired: '已过期',
+  failed: '登录失败',
+}
+
+function authFor(platform: SocialPlatform): SocialAuthStatus | undefined {
+  return authStatusMap.value[platform]
+}
+
+function authLabel(platform: SocialPlatform): string {
+  return authLabels[authFor(platform)?.state ?? 'not_logged_in']
+}
+
+function authTone(platform: SocialPlatform): string {
+  const state = authFor(platform)?.state ?? 'not_logged_in'
+  return `is-${state.replaceAll('_', '-')}`
+}
+
+function accountText(platform: SocialPlatform): string {
+  const status = authFor(platform)
+  if (!status) {
+    return ''
+  }
+  if (status.account_name) {
+    return status.account_name
+  }
+  if (status.logged_in) {
+    return '登录态已保存'
+  }
+  return status.message
+}
+
+function expiryText(platform: SocialPlatform): string {
+  const value = authFor(platform)?.expires_at
+  if (!value) {
+    return ''
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return ''
+  }
+  return `有效期至 ${new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed)}`
+}
 
 const showAuthHelp = computed(() => errorCode.value === 'platform_auth_required')
 const resultMeta = computed(() => {
@@ -65,10 +128,80 @@ async function handleSubmit(): Promise<void> {
 
     <section v-if="platforms.length" class="platform-strip">
       <article v-for="item in platforms" :key="item.platform" class="platform-note">
-        <PlatformBadge :platform="item.platform" />
+        <div class="platform-note__head">
+          <PlatformBadge :platform="item.platform" />
+          <span class="platform-note__state" :class="authTone(item.platform)">
+            {{ authLabel(item.platform) }}
+          </span>
+        </div>
         <p>{{ item.note }}</p>
+        <p v-if="accountText(item.platform)" class="platform-note__account">
+          {{ accountText(item.platform) }}
+          <span v-if="expiryText(item.platform)"> · {{ expiryText(item.platform) }}</span>
+        </p>
+        <div class="platform-note__actions">
+          <template v-if="authFor(item.platform)?.state === 'waiting'">
+            <el-button size="small" disabled>等待登录…</el-button>
+            <el-button
+              size="small"
+              link
+              type="danger"
+              :disabled="authActionPlatform === item.platform"
+              @click="logoutPlatform(item.platform)"
+            >
+              取消
+            </el-button>
+          </template>
+          <template v-else-if="authFor(item.platform)?.logged_in">
+            <el-button
+              size="small"
+              link
+              type="primary"
+              :loading="authActionPlatform === item.platform"
+              @click="switchAccount(item.platform)"
+            >
+              切换账号
+            </el-button>
+            <el-button
+              size="small"
+              link
+              type="danger"
+              :disabled="authActionPlatform === item.platform"
+              @click="logoutPlatform(item.platform)"
+            >
+              退出
+            </el-button>
+          </template>
+          <el-button
+            v-else
+            size="small"
+            type="primary"
+            plain
+            :loading="authActionPlatform === item.platform"
+            @click="loginPlatform(item.platform)"
+          >
+            登录
+          </el-button>
+        </div>
       </article>
     </section>
+
+    <el-alert
+      v-if="authNotice"
+      class="auth-notice"
+      :title="authNotice"
+      type="info"
+      :closable="false"
+      show-icon
+    />
+    <el-alert
+      v-if="authError"
+      class="auth-notice"
+      :title="authError"
+      type="error"
+      :closable="false"
+      show-icon
+    />
 
     <section class="social-form gn-card">
       <div class="social-form__head">
@@ -205,12 +338,45 @@ async function handleSubmit(): Promise<void> {
 
 .platform-note {
   display: flex;
-  align-items: flex-start;
-  gap: 9px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
   padding: 12px 14px;
   border: 1px solid var(--gn-border);
   border-radius: 12px;
   background: rgba(255, 253, 248, 0.55);
+}
+
+.platform-note__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.platform-note__state {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--gn-paper-deep);
+  color: var(--gn-muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.platform-note__state.is-logged-in {
+  color: var(--gn-sage);
+  background: var(--gn-sage-soft);
+}
+
+.platform-note__state.is-waiting {
+  color: var(--gn-gold);
+  background: var(--gn-gold-soft);
+}
+
+.platform-note__state.is-expired,
+.platform-note__state.is-failed {
+  color: var(--gn-accent);
+  background: var(--gn-accent-soft);
 }
 
 .platform-note p {
@@ -218,6 +384,24 @@ async function handleSubmit(): Promise<void> {
   color: var(--gn-muted);
   font-size: 10px;
   line-height: 1.55;
+}
+
+.platform-note p.platform-note__account {
+  color: var(--gn-ink-soft);
+  font-size: 9px;
+}
+
+.platform-note__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 28px;
+  margin-top: auto;
+}
+
+.auth-notice {
+  border-radius: 12px;
 }
 
 .social-form {

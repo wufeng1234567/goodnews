@@ -3,7 +3,9 @@
 Vue 3 Composition API + TypeScript + Vite + Pinia + Vue Router + Element Plus.
 All business requests live in `src/api/`; pages only compose components and
 composables. The social-platform page is `src/views/SocialView.vue`, backed by
-`src/stores/social.ts` and `src/api/social.ts`.
+`src/stores/social.ts`, `src/stores/socialAuth.ts` and `src/api/social.ts`.
+Platform cards include login, logout and account-switch buttons plus automatic
+auth-status refresh.
 
 ## Run
 

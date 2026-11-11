@@ -84,3 +84,22 @@ export interface SocialPlatformInfo {
 export interface SocialPlatformListResponse {
   platforms: SocialPlatformInfo[]
 }
+
+export type SocialAuthState = 'not_logged_in' | 'waiting' | 'logged_in' | 'expired' | 'failed'
+
+export interface SocialAuthStatus {
+  platform: SocialPlatform
+  state: SocialAuthState
+  logged_in: boolean
+  account_name: string | null
+  message: string
+  expires_at: string | null
+  last_login_at: string | null
+  last_checked_at: string | null
+  last_refreshed_at: string | null
+  auto_refresh: boolean
+}
+
+export interface SocialAuthStatusListResponse {
+  statuses: SocialAuthStatus[]
+}

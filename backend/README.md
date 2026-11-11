@@ -65,7 +65,14 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 
 :: social platforms: Xiaohongshu login helper (first run only)
 ..\scripts\social-login.bat xiaohongshu
+
+:: social auth status (also available as login/logout buttons in the web UI)
+curl.exe http://127.0.0.1:8010/api/v1/social/auth/status
 ```
+
+The login button opens a visible Edge window, waits for the platform login
+cookie, and saves a Playwright storage state under `backend/.browser-profiles/`.
+Logout deletes it; `SOCIAL_KEEPALIVE_HOURS` controls best-effort session refresh.
 
 ## MVP temporary decisions / refactor points
 

@@ -17,6 +17,7 @@ from app.models.social import (
 from app.platforms.base import (
     LOGIN_COMMANDS,
     PLATFORM_LABELS,
+    PlatformAuthRequired,
     PlatformDetectError,
     detect_platform,
     extract_first_url,
@@ -24,14 +25,21 @@ from app.platforms.base import (
 from app.platforms.bilibili import BilibiliAdapter
 from app.platforms.douyin import DouyinAdapter
 from app.platforms.xiaohongshu import XiaohongshuAdapter
+from app.services.social_auth import SocialAuthManager
 
 logger = logging.getLogger(__name__)
 
 
 class SocialService:
-    def __init__(self, settings: Settings, repository: SocialFetchRepository) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        repository: SocialFetchRepository,
+        auth_manager: SocialAuthManager,
+    ) -> None:
         self._settings = settings
         self._repository = repository
+        self._auth_manager = auth_manager
         self._adapters: dict[SocialPlatform, Any] = {
             SocialPlatform.BILIBILI: BilibiliAdapter(settings),
             SocialPlatform.DOUYIN: DouyinAdapter(settings),
@@ -66,6 +74,10 @@ class SocialService:
             raise PlatformDetectError("没有找到该链接对应的平台适配器", platform=platform)
 
         normalized_request = request.model_copy(update={"url": url})
-        result = await adapter.fetch(normalized_request)
+        try:
+            result = await adapter.fetch(normalized_request)
+        except PlatformAuthRequired:
+            self._auth_manager.mark_expired(platform)
+            raise
         await self._repository.save(result)
         return result

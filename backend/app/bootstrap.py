@@ -25,6 +25,7 @@ from app.services.cache import RedisCache
 from app.services.evidence_service import EvidenceService
 from app.services.factcheck_service import FactCheckService
 from app.services.search_service import SearchService
+from app.services.social_auth import SocialAuthManager
 from app.services.social_service import SocialService
 
 
@@ -43,10 +44,12 @@ class AppContainer:
     factcheck_repository: FactCheckRepository
     social_service: SocialService
     social_repository: SocialFetchRepository
+    social_auth_manager: SocialAuthManager
     compiled_graph: Any = None
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     async def close(self) -> None:
+        await self.social_auth_manager.close()
         await self.llm.aclose()
         await self.graph_repository.close()
         await self.cache.close()
@@ -85,7 +88,9 @@ async def build_container(settings: Settings) -> AppContainer:
     social_repository = SocialFetchRepository(
         database.session_factory, database.available
     )
-    social_service = SocialService(settings, social_repository)
+    social_auth_manager = SocialAuthManager(settings)
+    social_auth_manager.start_background()
+    social_service = SocialService(settings, social_repository, social_auth_manager)
 
     return AppContainer(
         settings=settings,
@@ -101,5 +106,6 @@ async def build_container(settings: Settings) -> AppContainer:
         factcheck_repository=factcheck_repository,
         social_service=social_service,
         social_repository=social_repository,
+        social_auth_manager=social_auth_manager,
         compiled_graph=compiled_graph,
     )

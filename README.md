@@ -19,6 +19,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 ![goodnews Bilibili 采集](docs/screenshots/04-social-bilibili.png)
 ![goodnews 抖音采集](docs/screenshots/05-social-douyin.png)
 ![goodnews 小红书登录提示](docs/screenshots/06-social-xhs-auth.png)
+![goodnews 平台账号登录](docs/screenshots/07-social-login.png)
 
 ## 当前实现范围
 
@@ -29,6 +30,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 - ✅ Neo4j 异步驱动 + Cypher 仓库 + 确定性图谱校验
 - ✅ Scrapy + scrapy-playwright + trafilatura 正文提取
 - ✅ 小红书 / 抖音 / Bilibili 内容 + 评论统一采集（浏览器登录态可选）
+- ✅ 三平台网页内登录、退出、切换账号、登录态持久化与过期检测
 - ✅ PostgreSQL 持久化核查与社媒采集快照；pgvector 仅建占位表不使用
 - ✅ Redis 仅作搜索缓存
 - ❌ 无登录 / JWT、无 Celery、无多 Agent、无桌面端、无向量语义去重（按范围）
@@ -162,7 +164,7 @@ npm run dev
 | 核查 | `FACTCHECK_MAX_EVIDENCE_ROUNDS` `MAX_CLAIMS` `MAX_ARTICLE_CHARS` `MAX_FACTCHECK_INPUT_CHARS` `EVIDENCE_FETCH_TOP_N` |
 | 搜索 | `SEARCH_PROVIDER`（`google_news_rss` / `bing_rss`）`SEARCH_RESULT_LIMIT` `SEARCH_TIMEOUT_SECONDS` |
 | 爬虫 | `CRAWLER_TIMEOUT_SECONDS` `CRAWLER_PLAYWRIGHT_ENABLED` `PLAYWRIGHT_TIMEOUT_MS` `PLAYWRIGHT_BROWSER_CHANNEL` `ALLOW_PRIVATE_URLS` |
-| 社媒采集 | `SOCIAL_BROWSER_HEADLESS` `SOCIAL_BROWSER_TIMEOUT_MS` `SOCIAL_STATE_DIR` `SOCIAL_MAX_COMMENTS_DEFAULT` `XHS_COOKIE` `DOUYIN_COOKIE` `BILIBILI_COOKIE` |
+| 社媒采集 | `SOCIAL_BROWSER_HEADLESS` `SOCIAL_BROWSER_TIMEOUT_MS` `SOCIAL_STATE_DIR` `SOCIAL_MAX_COMMENTS_DEFAULT` `SOCIAL_LOGIN_TIMEOUT_SECONDS` `SOCIAL_KEEPALIVE_HOURS` `XHS_COOKIE` `DOUYIN_COOKIE` `BILIBILI_COOKIE` |
 | 本机推送凭据 | `GITHUB_TOKEN` `GITEE_TOKEN`（仅本地 `.env`，应用不读取） |
 
 ## API
@@ -176,6 +178,10 @@ npm run dev
 | POST | `/api/v1/search` | 关键词新闻搜索 |
 | GET | `/api/v1/search/hot` | 热点新闻 |
 | GET | `/api/v1/social/platforms` | 三平台能力与登录要求 |
+| GET | `/api/v1/social/auth/status` | 三平台登录态、账号与过期时间 |
+| POST | `/api/v1/social/auth/login` | 打开可见浏览器，等待扫码并保存登录态 |
+| POST | `/api/v1/social/auth/logout` | 退出并删除本地登录态 |
+| POST | `/api/v1/social/auth/refresh` | 用现有登录态访问平台并刷新 Cookie |
 | POST | `/api/v1/social/fetch` | 获取社媒内容详情 + 评论 |
 | GET | `/api/v1/graph/stats` | Neo4j 实体/关系规模 |
 
@@ -207,9 +213,19 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 
 - **Bilibili**：直接调用公开 API，不需要浏览器；匿名接口可能只返回部分热门评论，配置 `BILIBILI_COOKIE` 可提升完整度。
 - **抖音**：用 Playwright + 本机 Edge 打开公开视频页，读取页面自身的详情/评论 JSON；大多数公开视频无需登录。
-- **小红书**：匿名访问会触发登录/安全验证。先双击 `scripts\social-login.bat xiaohongshu`，用 Edge 扫码登录；登录态保存在 `backend\.browser-profiles\xiaohongshu.json`（已 gitignore）。
+- **小红书**：匿名访问会触发登录/安全验证，登录后可自动使用本地会话。
 
-社媒采集会写入 PostgreSQL 的 `social_fetch_records` 快照表。
+### 账号登录 / 退出 / 切换 / 保活
+
+在“平台采集”页面每个平台卡片右侧可以直接：
+
+1. 点 **登录**：后端弹出可见 Edge 窗口；扫码或输入账号后，自动检测平台登录 Cookie，并把 Playwright storage state 保存到 `backend\.browser-profiles\<platform>.json`。
+2. 点 **退出**：删除该平台本地登录态，后续请求回到匿名会话。
+3. 点 **切换账号**：先清除当前登录态，再启动新的登录窗口。
+4. 页面加载和每 60 秒自动读取一次登录状态；Cookie 到期或平台返回登录墙时显示“已过期”，采集请求也会自动提示重新登录。
+5. 后台服务每 `SOCIAL_KEEPALIVE_HOURS` 小时用现有登录态访问一次平台并保存刷新后的 Cookie，尽量延长会话。平台强制失效、改密或风控仍需要重新登录一次，无法保证永久免登录。
+
+登录态只存在本机，目录已 gitignore。社媒采集会写入 PostgreSQL 的 `social_fetch_records` 快照表。
 
 ## 各模块验证方式
 
@@ -221,12 +237,14 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 | 图谱确定性校验 | 提交 `埃菲尔铁塔位于柏林。`，应返回 `verdict=false` 且 `graph.status=contradicted` |
 | 搜索 | `GET /api/v1/search/hot?limit=3` 或 `POST /api/v1/search` |
 | 社媒平台能力 | `GET /api/v1/social/platforms` |
+| 社媒登录态 | `GET /api/v1/social/auth/status` → 三平台状态 |
+| 登录生命周期 | 页面点登录/退出/切换，或用 `scripts\social-login.bat <platform>` |
 | Bilibili 采集 | `POST /api/v1/social/fetch`，body 中的 URL 使用 B 站视频链接 |
 | 抖音采集 | 同上，使用抖音视频链接；首次会启动 Edge |
-| 小红书登录态 | 先运行 `scripts\social-login.bat xiaohongshu`，再用小红书链接调接口 |
+| 小红书登录态 | 页面点登录，或运行 `scripts\social-login.bat xiaohongshu` |
 | 爬虫 | `.venv\Scripts\python.exe -m app.crawler.runner --url <公开文章URL> --output crawler-output.json` |
 | 数据库历史 | `GET /api/v1/factcheck/history` |
-| 后端测试 | `.venv\Scripts\python.exe -m pytest -q` → **15 passed** |
+| 后端测试 | `.venv\Scripts\python.exe -m pytest -q` → **18 passed** |
 | 后端静态检查 | `.venv\Scripts\ruff.exe check app scripts tests` → all checks passed |
 | 前端类型检查 | `cd frontend && npm run typecheck` |
 | 前端生产构建 | `npm run build` |
@@ -251,6 +269,7 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 - `article_embeddings` 与 pgvector 只建表不查询；后期才做语义去重。
 - 按要求不含登录/JWT；公开部署前必须补认证、限流、审计与 URL 重定向深度防护。
 - 社媒采集受平台风控影响：Bilibili 匿名接口只返回部分热门评论；抖音依赖页面结构；小红书必须有登录态。
+- 社媒登录态是平台 Cookie 的本地保存与定时访问续期，平台强制失效、改密或风控时仍需重新扫码登录，不能保证永久有效。
 - 社媒采集当前只支持按内容 URL 采集，不支持按关键词跨平台搜索/热榜抓取。
 - 前端未做 SSR/PWA/桌面端，符合本期范围。
 

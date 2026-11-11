@@ -96,6 +96,8 @@ class Settings(BaseSettings):
     social_browser_timeout_ms: int = 45_000
     social_state_dir: str = "backend/.browser-profiles"
     social_max_comments_default: int = 30
+    social_login_timeout_seconds: int = 600
+    social_keepalive_hours: int = 6
     # Optional raw Cookie headers. Prefer the login helper which writes a
     # Playwright storage-state file; these values are only for deployment.
     xhs_cookie: SecretStr = SecretStr("")

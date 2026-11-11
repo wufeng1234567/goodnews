@@ -59,6 +59,20 @@ URL / share text
 - Content metrics (views, likes, comments, shares, collects, coins, danmaku)
   are platform-specific and nullable.
 
+## Social account sessions
+
+```text
+Login button -> visible Edge -> wait for platform login cookie
+  -> save Playwright storage state + metadata
+  -> adapters automatically use it on fetch
+  -> status checks cookie expiry / platform auth errors
+  -> logout deletes state; keepalive visits platform periodically
+```
+
+The storage state contains cookies and is git-ignored. Platform-side logout or
+forced invalidation can still require a fresh QR login; auto-refresh is
+best-effort, not a guarantee.
+
 ## Explicit MVP boundaries
 
 - No login/JWT, no Celery, no multi-agent, no vector semantic dedupe.
