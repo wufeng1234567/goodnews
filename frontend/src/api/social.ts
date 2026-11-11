@@ -6,6 +6,7 @@ import type {
   SocialFetchResponse,
   SocialJobCreateRequest,
   SocialJobStatus,
+  SocialHistoryListResponse,
   SocialPlatform,
   SocialPlatformListResponse,
   SocialReplyResponse,
@@ -56,6 +57,18 @@ export async function createSocialJob(
 
 export async function getSocialJob(jobId: string): Promise<SocialJobStatus> {
   const { data } = await apiClient.get<SocialJobStatus>(`/social/jobs/${jobId}`)
+  return data
+}
+
+export async function getSocialHistory(limit = 30): Promise<SocialHistoryListResponse> {
+  const { data } = await apiClient.get<SocialHistoryListResponse>('/social/history', {
+    params: { limit },
+  })
+  return data
+}
+
+export async function getSocialHistoryDetail(recordId: string): Promise<SocialFetchResponse> {
+  const { data } = await apiClient.get<SocialFetchResponse>(`/social/history/${recordId}`)
   return data
 }
 

@@ -22,6 +22,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 ![goodnews 平台账号登录](docs/screenshots/07-social-login.png)
 ![goodnews 全量评论与导出](docs/screenshots/08-social-full-export.png)
 ![goodnews 完整回复弹窗](docs/screenshots/09-social-reply-dialog.png)
+![goodnews 历史采集记录](docs/screenshots/10-social-history.png)
 
 ## 当前实现范围
 
@@ -34,6 +35,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 - ✅ 小红书 / 抖音 / Bilibili 内容 + 评论统一采集（浏览器登录态可选）
 - ✅ 三平台网页内登录、退出、切换账号、登录态持久化与过期检测
 - ✅ 后台全量评论任务、Excel/Markdown/TXT 导出、B 站楼中楼分页
+- ✅ 历史采集记录可回放：保存输入网址、标题、评论数和时间，并提供“重新获取”
 - ✅ 子回复超过 3 条自动折叠，点击打开固定高度“完整父评论 + 子回复”弹窗
 - ✅ PostgreSQL 持久化核查与社媒采集快照；pgvector 仅建占位表不使用
 - ✅ Redis 仅作搜索缓存
@@ -191,6 +193,8 @@ npm run dev
 | GET | `/api/v1/social/jobs/{id}` | 查询全量任务状态与已抓取数量 |
 | GET | `/api/v1/social/jobs/{id}/export?format=xlsx\|md\|txt` | 导出 Excel / Markdown / TXT |
 | GET | `/api/v1/social/comments/replies` | B站单条父评论的完整楼中楼 |
+| GET | `/api/v1/social/history?limit=30` | 历史采集记录列表 |
+| GET | `/api/v1/social/history/{id}` | 历史记录完整快照 |
 | GET | `/api/v1/graph/stats` | Neo4j 实体/关系规模 |
 
 ### 核查示例
@@ -249,6 +253,16 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
   - **Markdown (.md)**：适合阅读与归档。
   - **纯文本 (.txt)**：便于后处理。
 - 硬上限由 `SOCIAL_FULL_MAX_COMMENTS` 控制，默认 50,000；任务运行在应用进程内的后台任务器，不依赖 Celery（0.0.2 MVP）。
+
+### 历史采集记录
+
+平台采集页右上角有「历史采集」按钮，打开后可以：
+
+- 查看最近 30 次采集的网址、标题、作者、评论数和采集时间；
+- 点击一条历史记录，回放当时的完整内容与评论快照；
+- 点击「重新获取」，使用原网址重新采集最新内容。
+
+历史接口：`GET /api/v1/social/history?limit=30`、`GET /api/v1/social/history/{id}`。
 
 ## 各模块验证方式
 

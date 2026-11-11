@@ -69,7 +69,7 @@ export interface SocialFetchResponse {
   fetched_at: string
   total_comments_fetched: number
   has_more: boolean
-  collection_method: 'public_api' | 'browser_api' | 'browser_dom'
+  collection_method: 'public_api' | 'browser_api'
   auth_mode: 'none' | 'cookie' | 'storage_state'
   warnings: string[]
 }
@@ -112,6 +112,21 @@ export interface SocialJobCreateRequest {
   url: string
   include_replies: boolean
   max_comments: number
+}
+
+export interface SocialHistoryItem {
+  id: string
+  platform: SocialPlatform
+  content_id: string
+  url: string
+  title: string
+  author_name: string
+  comments_fetched: number
+  fetched_at: string
+}
+
+export interface SocialHistoryListResponse {
+  items: SocialHistoryItem[]
 }
 
 export interface SocialReplyResponse {

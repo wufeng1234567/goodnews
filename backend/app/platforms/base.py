@@ -66,6 +66,13 @@ class PlatformFetchError(SocialPlatformError):
     code = "platform_fetch_failed"
 
 
+class PlatformAccessBlocked(SocialPlatformError):
+    """The platform served a security/CAPTCHA wall; the saved session may be
+    valid, so this must not be reported as an expired cookie."""
+
+    code = "platform_access_blocked"
+
+
 class SocialAdapter(Protocol):
     platform: SocialPlatform
 

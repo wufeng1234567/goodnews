@@ -121,7 +121,7 @@ class SocialFetchResponse(BaseModel):
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     total_comments_fetched: int = 0
     has_more: bool = False
-    collection_method: Literal["public_api", "browser_api", "browser_dom"] = "public_api"
+    collection_method: Literal["public_api", "browser_api"] = "public_api"
     auth_mode: Literal["none", "cookie", "storage_state"] = "none"
     warnings: list[str] = Field(default_factory=list)
 
@@ -189,6 +189,21 @@ class SocialJobCreateRequest(BaseModel):
         if not match:
             raise ValueError("请粘贴小红书/抖音/Bilibili 的内容链接")
         return match.group(0).rstrip("，。,.；;）)】]")
+
+
+class SocialHistoryItem(BaseModel):
+    id: str
+    platform: SocialPlatform
+    content_id: str
+    url: str
+    title: str
+    author_name: str
+    comments_fetched: int
+    fetched_at: datetime
+
+
+class SocialHistoryListResponse(BaseModel):
+    items: list[SocialHistoryItem]
 
 
 class SocialReplyResponse(BaseModel):

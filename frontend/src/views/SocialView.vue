@@ -8,10 +8,20 @@ import SocialContentCard from '@/components/SocialContentCard.vue'
 import { useSocialAuth } from '@/composables/useSocialAuth'
 import { useSocialFetch } from '@/composables/useSocialFetch'
 import { useSocialJobs } from '@/composables/useSocialJobs'
-import type { SocialAuthStatus, SocialPlatform } from '@/types'
+import { useSocialHistory } from '@/composables/useSocialHistory'
+import type { SocialAuthStatus, SocialHistoryItem, SocialPlatform } from '@/types'
 
 const url = ref('')
 const maxComments = ref(30)
+const historyOpen = ref(false)
+const {
+  items: historyItems,
+  loading: historyLoading,
+  detailLoading: historyDetailLoading,
+  error: historyError,
+  load: loadHistory,
+  loadDetail: loadHistoryDetail,
+} = useSocialHistory()
 const {
   result,
   platforms,
@@ -84,6 +94,7 @@ function expiryText(platform: SocialPlatform): string {
     return ''
   }
   return `有效期至 ${new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -99,7 +110,6 @@ const resultMeta = computed(() => {
   const methodLabels: Record<typeof result.value.collection_method, string> = {
     public_api: '公开 API',
     browser_api: '浏览器原请求',
-    browser_dom: '页面 DOM 兜底',
   }
   const authLabels: Record<typeof result.value.auth_mode, string> = {
     none: '匿名会话',
@@ -141,6 +151,31 @@ async function handleFullCollection(): Promise<void> {
   if (sourceUrl) {
     await startFullJob(sourceUrl)
   }
+}
+
+async function openHistory(): Promise<void> {
+  historyOpen.value = true
+  await loadHistory()
+}
+
+async function selectHistory(item: SocialHistoryItem): Promise<void> {
+  const detail = await loadHistoryDetail(item.id)
+  if (detail) {
+    result.value = detail
+    url.value = item.url
+    historyOpen.value = false
+  }
+}
+
+async function refetchHistory(item: SocialHistoryItem): Promise<void> {
+  url.value = item.url
+  historyOpen.value = false
+  await submit(item.url, maxComments.value)
+}
+
+function formatHistoryDate(value: string): string {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('zh-CN')
 }
 </script>
 
@@ -238,7 +273,10 @@ async function handleFullCollection(): Promise<void> {
           <p class="gn-eyebrow">Paste a link</p>
           <h2 class="gn-serif">内容 + 评论一次采集</h2>
         </div>
-        <span class="social-form__supported">XHS / DY / BILI</span>
+        <div class="social-form__head-actions">
+          <span class="social-form__supported">XHS / DY / BILI</span>
+          <el-button text size="small" @click="openHistory">历史采集</el-button>
+        </div>
       </div>
 
       <el-input
@@ -382,6 +420,56 @@ async function handleFullCollection(): Promise<void> {
       title="还没有采集内容"
       description="从上面的输入框粘贴一条链接。Bilibili 与抖音可直接采集，小红书需要先完成登录。"
     />
+
+    <el-drawer v-model="historyOpen" title="历史采集记录" size="min(560px, 92vw)">
+      <div class="history-panel">
+        <div class="history-panel__head">
+          <span>最近 {{ historyItems.length }} 条记录</span>
+          <el-button text size="small" :loading="historyLoading" @click="loadHistory">刷新</el-button>
+        </div>
+        <el-alert
+          v-if="historyError"
+          :title="historyError"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+        <div v-if="historyLoading" class="history-panel__loading">
+          <LoadingSkeleton :rows="3" />
+        </div>
+        <div v-else-if="!historyItems.length" class="history-panel__empty">
+          还没有采集记录。完成一次采集后，这里会保存网址和评论快照。
+        </div>
+        <div v-else class="history-panel__items">
+          <article
+            v-for="item in historyItems"
+            :key="item.id"
+            class="history-item"
+            :class="{ 'is-loading': historyDetailLoading }"
+            @click="selectHistory(item)"
+          >
+            <div class="history-item__top">
+              <span class="history-item__platform">{{ item.platform }}</span>
+              <time>{{ formatHistoryDate(item.fetched_at) }}</time>
+            </div>
+            <strong>{{ item.title }}</strong>
+            <p class="history-item__url">{{ item.url }}</p>
+            <div class="history-item__bottom">
+              <span>{{ item.author_name }} · {{ item.comments_fetched }} 条评论</span>
+              <el-button
+                text
+                size="small"
+                type="primary"
+                :disabled="historyDetailLoading"
+                @click.stop="refetchHistory(item)"
+              >
+                重新获取
+              </el-button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -510,10 +598,99 @@ async function handleFullCollection(): Promise<void> {
   letter-spacing: -0.035em;
 }
 
+.social-form__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .social-form__supported {
   color: var(--gn-muted);
   font-size: 9px;
   letter-spacing: 0.12em;
+}
+
+.history-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.history-panel__head,
+.history-item__top,
+.history-item__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-panel__head {
+  color: var(--gn-muted);
+  font-size: 10px;
+}
+
+.history-panel__loading,
+.history-panel__empty {
+  color: var(--gn-muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.history-panel__items {
+  display: grid;
+  gap: 9px;
+}
+
+.history-item {
+  padding: 13px 14px;
+  border: 1px solid var(--gn-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.history-item:hover {
+  border-color: var(--gn-accent);
+  background: var(--gn-accent-soft);
+}
+
+.history-item.is-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.history-item__top {
+  color: var(--gn-muted);
+  font-size: 9px;
+}
+
+.history-item__platform {
+  color: var(--gn-accent);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.history-item strong {
+  display: block;
+  margin: 7px 0 4px;
+  color: var(--gn-ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.history-item__url {
+  overflow: hidden;
+  margin: 0;
+  color: var(--gn-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-item__bottom {
+  margin-top: 9px;
+  color: var(--gn-muted);
+  font-size: 9px;
 }
 
 .social-form :deep(.el-textarea__inner) {

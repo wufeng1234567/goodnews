@@ -28,6 +28,7 @@ from app.models.social import (
     SocialPlatform,
 )
 from app.platforms.base import (
+    PlatformAccessBlocked,
     PlatformAuthRequired,
     PlatformContentNotFound,
     count_comment_tree,
@@ -39,6 +40,7 @@ from app.platforms.browser import (
     auth_mode,
     login_required_message,
     open_browser_page,
+    storage_state_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,6 +114,13 @@ class XiaohongshuAdapter:
                 page_text = ""
 
             if self._looks_like_auth_wall(page_url, page_text):
+                if storage_state_path(self._settings, self.platform).exists():
+                    raise PlatformAccessBlocked(
+                        "小红书返回安全风控页；这不等于 Cookie 已过期，"
+                        "请切换网络/IP 或稍后重试。",
+                        platform=self.platform,
+                        hint="已保留登录态；如平台要求重新登录，再点击账号卡片上的登录。",
+                    )
                 raise PlatformAuthRequired(
                     login_required_message(self.platform),
                     platform=self.platform,
@@ -141,26 +150,10 @@ class XiaohongshuAdapter:
 
             note_data = self._extract_note_payload(note_payloads)
             if note_data is None:
-                dom_data = await self._extract_dom_note(page)
-                if dom_data:
-                    content = parse_xhs_dom_content(dom_data, page_url)
-                    comments = parse_xhs_dom_comments(dom_data.get("comments", []), content.content_id)
-                    return SocialFetchResponse(
-                        platform=self.platform,
-                        content=content,
-                        comments=comments[: request.max_comments],
-                        total_comments_fetched=min(
-                            count_comment_tree(comments), request.max_comments
-                        ),
-                        has_more=len(comments) > request.max_comments,
-                        collection_method="browser_dom",
-                        auth_mode=auth_mode(self._settings, self.platform),
-                        warnings=["使用页面 DOM 兜底解析，评论数可能少于实际值。"],
-                    )
                 raise PlatformContentNotFound(
-                    "没有从页面中解析到小红书笔记内容",
+                    "没有从页面 API 捕获到小红书笔记数据（已禁用 DOM 兜底）",
                     platform=self.platform,
-                    hint="确认笔记公开可访问，并运行小红书登录辅助脚本",
+                    hint="请确认登录态有效、网络未被小红书风控，必要时重新登录。",
                 )
 
         content = parse_xhs_content(note_data, source_url=page_url)
@@ -222,46 +215,6 @@ class XiaohongshuAdapter:
             if found:
                 return found
         return None
-
-    @staticmethod
-    async def _extract_dom_note(page) -> dict[str, Any] | None:
-        try:
-            data = await page.evaluate(
-                """
-                () => {
-                  const text = (selector) => {
-                    const node = document.querySelector(selector);
-                    return node ? (node.innerText || node.textContent || '').trim() : '';
-                  };
-                  const attr = (selector, name) => {
-                    const node = document.querySelector(selector);
-                    return node ? node.getAttribute(name) : '';
-                  };
-                  const comments = Array.from(document.querySelectorAll('.comment-item')).slice(0, 50).map((node, index) => ({
-                    id: node.getAttribute('data-id') || `dom-${index}`,
-                    text: (node.querySelector('.content .note-text, .note-text, .content')?.innerText || '').trim(),
-                    author: (node.querySelector('.author .name, .name')?.innerText || '').trim(),
-                    likes: (node.querySelector('.like .count, .count')?.innerText || '0').trim(),
-                  }));
-                  return {
-                    title: text('#detail-title') || text('.note-content .title') || text('h1'),
-                    description: text('#detail-desc') || text('.note-content .desc') || text('.note-text'),
-                    author: text('.author-wrapper .name') || text('.author .name') || text('.username'),
-                    likes: text('.interact-container .like-wrapper .count') || text('.like-wrapper .count'),
-                    collects: text('.interact-container .collect-wrapper .count') || text('.collect-wrapper .count'),
-                    comments_count: text('.interact-container .chat-wrapper .count') || text('.chat-wrapper .count'),
-                    cover: attr('meta[property="og:image"]', 'content') || attr('.media-container img', 'src'),
-                    comments,
-                  };
-                }
-                """
-            )
-            if isinstance(data, dict) and (data.get("title") or data.get("description")):
-                return data
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("XHS DOM fallback failed: %s", exc)
-        return None
-
 
 def parse_xhs_content(note: dict[str, Any], source_url: str | None = None) -> SocialContent:
     note_id = str(note.get("note_id") or note.get("id") or "")
@@ -365,41 +318,6 @@ def _parse_xhs_comment(
         created_at=timestamp_to_datetime(raw.get("create_time")),
         replies=[],
     )
-
-
-def parse_xhs_dom_content(data: dict[str, Any], page_url: str) -> SocialContent:
-    note_id = XiaohongshuAdapter.extract_note_id(page_url) or ""
-    return SocialContent(
-        platform=SocialPlatform.XIAOHONGSHU,
-        content_id=note_id,
-        content_type=SocialContentType.NOTE,
-        url=page_url,
-        title=str(data.get("title") or "未命名笔记")[:300],
-        description=str(data.get("description") or ""),
-        author=SocialAuthor(name=str(data.get("author") or "未知作者")),
-        cover_url=str(data.get("cover") or "") or None,
-        metrics=SocialMetrics(
-            like_count=parse_count(data.get("likes")),
-            collect_count=parse_count(data.get("collects")),
-            comment_count=parse_count(data.get("comments_count")),
-        ),
-    )
-
-
-def parse_xhs_dom_comments(
-    raw_comments: list[dict[str, Any]], content_id: str
-) -> list[SocialComment]:
-    return [
-        SocialComment(
-            id=str(item.get("id") or f"dom-{index}"),
-            content_id=content_id,
-            text=str(item.get("text") or ""),
-            author_name=str(item.get("author") or "匿名用户"),
-            like_count=parse_count(item.get("likes")),
-        )
-        for index, item in enumerate(raw_comments)
-        if item.get("text")
-    ]
 
 
 def _xhs_media_urls(note: dict[str, Any]) -> list[str]:

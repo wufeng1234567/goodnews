@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.tables import SocialFetchRecord
-from app.models.social import SocialFetchResponse
+from app.models.social import SocialFetchResponse, SocialHistoryItem, SocialPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -52,3 +53,29 @@ class SocialFetchRepository:
             if record is None:
                 return None
             return SocialFetchResponse.model_validate(record.result)
+
+    async def list_recent(
+        self,
+        limit: int = 30,
+        platform: SocialPlatform | None = None,
+    ) -> list[SocialHistoryItem]:
+        if not self.available or self._session_factory is None:
+            return []
+        async with self._session_factory() as session:
+            query = select(SocialFetchRecord).order_by(SocialFetchRecord.fetched_at.desc())
+            if platform is not None:
+                query = query.where(SocialFetchRecord.platform == platform.value)
+            records = (await session.scalars(query.limit(limit))).all()
+            return [
+                SocialHistoryItem(
+                    id=record.id,
+                    platform=SocialPlatform(record.platform),
+                    content_id=record.content_id,
+                    url=record.url,
+                    title=record.title,
+                    author_name=record.author_name,
+                    comments_fetched=record.comments_fetched,
+                    fetched_at=record.fetched_at,
+                )
+                for record in records
+            ]

@@ -6,12 +6,18 @@ export function useSocialAuth() {
   const store = useSocialAuthStore()
   const { statuses, loading, actionPlatform, error, notice, statusMap } = storeToRefs(store)
 
+  const refreshOnFocus = (): void => {
+    void store.loadStatuses()
+  }
+
   onMounted(() => {
     void store.loadStatuses()
     store.startStatusRefresh()
+    window.addEventListener('focus', refreshOnFocus)
   })
 
   onBeforeUnmount(() => {
+    window.removeEventListener('focus', refreshOnFocus)
     store.dispose()
   })
 

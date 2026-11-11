@@ -14,6 +14,7 @@ from app.models.social import (
     SocialAuthStatusListResponse,
     SocialFetchRequest,
     SocialFetchResponse,
+    SocialHistoryListResponse,
     SocialJobCreateRequest,
     SocialJobStatus,
     SocialPlatform,
@@ -21,6 +22,7 @@ from app.models.social import (
     SocialReplyResponse,
 )
 from app.platforms.base import (
+    PlatformAccessBlocked,
     PlatformAuthRequired,
     PlatformContentNotFound,
     PlatformDetectError,
@@ -76,6 +78,27 @@ async def social_auth_refresh(
     container: ContainerDep,
 ) -> SocialAuthStatus:
     return await container.social_auth_manager.refresh(payload.platform)
+
+
+@router.get("/history", response_model=SocialHistoryListResponse)
+async def social_history(
+    container: ContainerDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 30,
+    platform: Annotated[SocialPlatform | None, Query()] = None,
+) -> SocialHistoryListResponse:
+    items = await container.social_repository.list_recent(limit=limit, platform=platform)
+    return SocialHistoryListResponse(items=items)
+
+
+@router.get("/history/{record_id}", response_model=SocialFetchResponse)
+async def social_history_detail(
+    record_id: str,
+    container: ContainerDep,
+) -> SocialFetchResponse:
+    result = await container.social_repository.get(record_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="历史采集记录不存在")
+    return result
 
 
 @router.get("/comments/replies", response_model=SocialReplyResponse)
@@ -172,6 +195,8 @@ async def fetch_social_content(
         return await container.social_service.fetch(payload)
     except PlatformAuthRequired as exc:
         raise HTTPException(status_code=403, detail=_error_detail(exc)) from exc
+    except PlatformAccessBlocked as exc:
+        raise HTTPException(status_code=409, detail=_error_detail(exc)) from exc
     except PlatformDetectError as exc:
         raise HTTPException(status_code=400, detail=_error_detail(exc)) from exc
     except PlatformContentNotFound as exc:
