@@ -4,6 +4,8 @@ import type {
   SocialAuthStatusListResponse,
   SocialFetchRequest,
   SocialFetchResponse,
+  SocialJobCreateRequest,
+  SocialJobStatus,
   SocialPlatform,
   SocialPlatformListResponse,
 } from '@/types'
@@ -42,4 +44,21 @@ export async function refreshSocialSession(
 ): Promise<SocialAuthStatus> {
   const { data } = await apiClient.post<SocialAuthStatus>('/social/auth/refresh', { platform })
   return data
+}
+
+export async function createSocialJob(
+  payload: SocialJobCreateRequest,
+): Promise<SocialJobStatus> {
+  const { data } = await apiClient.post<SocialJobStatus>('/social/jobs', payload)
+  return data
+}
+
+export async function getSocialJob(jobId: string): Promise<SocialJobStatus> {
+  const { data } = await apiClient.get<SocialJobStatus>(`/social/jobs/${jobId}`)
+  return data
+}
+
+export function socialJobExportUrl(jobId: string, format: 'xlsx' | 'md' | 'txt'): string {
+  const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  return `${base}/social/jobs/${jobId}/export?format=${format}`
 }

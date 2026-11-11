@@ -122,10 +122,11 @@ class BilibiliAdapter:
                 logger.warning("Bilibili comments failed: %s", exc)
                 warnings.append(f"评论获取失败：{exc}")
 
+            effective_max = request.max_comments or 50_000
             declared_comments = content.metrics.comment_count or 0
-            if declared_comments > len(comments) and len(comments) < request.max_comments:
+            if declared_comments > len(comments) and len(comments) < effective_max:
                 warnings.append(
-                    f"Bilibili 匿名接口本次仅返回 {len(comments)} 条热门评论"
+                    f"Bilibili 本次返回 {len(comments)} 条主评论"
                     f"（平台显示共 {declared_comments} 条）；配置 BILIBILI_COOKIE 可能提升完整度。"
                 )
 
@@ -147,11 +148,18 @@ class BilibiliAdapter:
         max_comments: int,
         include_replies: bool,
     ) -> tuple[list[SocialComment], bool]:
+        """Fetch top-level comments and, when requested, all nested replies.
+
+        Bilibili's ``/x/v2/reply/reply`` endpoint is a separate paginated API
+        for each root comment. The legacy top-level response only includes the
+        first 3 nested replies, which is why the UI previously looked truncated.
+        """
+        target = max_comments or 50_000
         comments: list[SocialComment] = []
         page_number = 1
         total_count = 0
         page_size = 20
-        while len(comments) < max_comments:
+        while count_comment_tree(comments) < target:
             data = await self._get_json(
                 client,
                 "https://api.bilibili.com/x/v2/reply",
@@ -169,15 +177,17 @@ class BilibiliAdapter:
             if not replies:
                 break
             for raw in replies:
-                if len(comments) >= max_comments:
+                if count_comment_tree(comments) >= target:
                     break
                 comment = parse_bilibili_comment(raw, content_id=str(aid))
-                if include_replies and raw.get("replies"):
-                    sub_comments = [
-                        parse_bilibili_comment(sub, content_id=str(aid), parent_id=comment.id)
-                        for sub in raw["replies"][:3]
-                    ]
-                    comment = comment.model_copy(update={"replies": sub_comments})
+                reply_count = parse_count(raw.get("rcount") or raw.get("count"))
+                if include_replies and reply_count:
+                    remaining = target - count_comment_tree(comments) - 1
+                    if remaining > 0:
+                        sub_comments = await self._fetch_sub_replies(
+                            client, aid, comment.id, remaining
+                        )
+                        comment = comment.model_copy(update={"replies": sub_comments})
                 comments.append(comment)
             if len(replies) < page_size:
                 break
@@ -185,6 +195,51 @@ class BilibiliAdapter:
             await asyncio.sleep(0.15)
 
         return comments, total_count > len(comments)
+
+    async def _fetch_sub_replies(
+        self,
+        client: httpx.AsyncClient,
+        aid: int,
+        root_id: str,
+        limit: int,
+    ) -> list[SocialComment]:
+        """Fetch all pages of replies for one root comment."""
+        out: list[SocialComment] = []
+        page_number = 1
+        page_size = 20
+        while len(out) < limit:
+            data = await self._get_json(
+                client,
+                "https://api.bilibili.com/x/v2/reply/reply",
+                {
+                    "type": 1,
+                    "oid": aid,
+                    "root": root_id,
+                    "pn": page_number,
+                    "ps": page_size,
+                    "sort": 2,
+                },
+            )
+            page = data.get("page") or {}
+            total = parse_count(page.get("count"))
+            replies = data.get("replies") or []
+            if not replies:
+                break
+            for raw in replies:
+                if len(out) >= limit:
+                    break
+                out.append(
+                    parse_bilibili_comment(
+                        raw,
+                        content_id=str(aid),
+                        parent_id=root_id,
+                    )
+                )
+            if len(replies) < page_size or len(out) >= total:
+                break
+            page_number += 1
+            await asyncio.sleep(0.12)
+        return out
 
 
 def parse_bilibili_video(data: dict[str, Any]) -> SocialContent:

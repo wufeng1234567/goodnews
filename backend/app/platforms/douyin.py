@@ -75,6 +75,11 @@ class DouyinAdapter:
         page_title = ""
         page_text = ""
         content_id = self.extract_content_id(request.url)
+        # Search/jingxuan URLs often carry modal_id; navigating to the direct
+        # video URL avoids the search page CAPTCHA shell.
+        navigate_url = request.url
+        if content_id and "modal_id=" in request.url and "/video/" not in request.url:
+            navigate_url = f"https://www.douyin.com/video/{content_id}"
 
         async with open_browser_page(self._settings, self.platform) as page:
             capture_tasks: set[asyncio.Task] = set()
@@ -99,7 +104,7 @@ class DouyinAdapter:
 
             try:
                 await page.goto(
-                    request.url,
+                    navigate_url,
                     wait_until="domcontentloaded",
                     timeout=self._settings.social_browser_timeout_ms,
                 )
@@ -161,9 +166,11 @@ class DouyinAdapter:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Douyin mouse positioning skipped: %s", exc)
 
+            target_comments = request.max_comments or 50_000
+            max_loops = 18 if target_comments <= 100 else min(500, 18 + target_comments // 5)
             previous_count = 0
             stagnant = 0
-            for _ in range(12):
+            for _ in range(max_loops):
                 await page.mouse.wheel(0, 1_000)
                 await page.evaluate(
                     """() => {
@@ -179,7 +186,7 @@ class DouyinAdapter:
                 current_count = sum(
                     len(item.get("comments") or []) for item in comment_pages if isinstance(item, dict)
                 )
-                if current_count >= request.max_comments:
+                if current_count >= target_comments:
                     break
                 if current_count == previous_count:
                     stagnant += 1

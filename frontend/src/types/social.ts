@@ -35,6 +35,7 @@ export interface SocialContent {
   author: SocialAuthor
   published_at: string | null
   cover_url: string | null
+  media_urls: string[]
   duration_seconds: number | null
   tags: string[]
   metrics: SocialMetrics
@@ -61,6 +62,7 @@ export interface SocialFetchRequest {
 }
 
 export interface SocialFetchResponse {
+  id: string
   platform: SocialPlatform
   content: SocialContent
   comments: SocialComment[]
@@ -102,4 +104,27 @@ export interface SocialAuthStatus {
 
 export interface SocialAuthStatusListResponse {
   statuses: SocialAuthStatus[]
+}
+
+export type SocialJobState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface SocialJobCreateRequest {
+  url: string
+  include_replies: boolean
+  max_comments: number
+}
+
+export interface SocialJobStatus {
+  id: string
+  platform: SocialPlatform
+  url: string
+  state: SocialJobState
+  progress: number
+  max_comments: number
+  total_fetched: number
+  record_id: string | null
+  error: string
+  created_at: string | null
+  updated_at: string | null
+  finished_at: string | null
 }

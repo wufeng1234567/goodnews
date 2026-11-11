@@ -20,6 +20,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 ![goodnews 抖音采集](docs/screenshots/05-social-douyin.png)
 ![goodnews 小红书登录提示](docs/screenshots/06-social-xhs-auth.png)
 ![goodnews 平台账号登录](docs/screenshots/07-social-login.png)
+![goodnews 全量评论与导出](docs/screenshots/08-social-full-export.png)
 
 ## 当前实现范围
 
@@ -31,6 +32,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 - ✅ Scrapy + scrapy-playwright + trafilatura 正文提取
 - ✅ 小红书 / 抖音 / Bilibili 内容 + 评论统一采集（浏览器登录态可选）
 - ✅ 三平台网页内登录、退出、切换账号、登录态持久化与过期检测
+- ✅ 后台全量评论任务、Excel/Markdown/TXT 导出、B 站楼中楼分页
 - ✅ PostgreSQL 持久化核查与社媒采集快照；pgvector 仅建占位表不使用
 - ✅ Redis 仅作搜索缓存
 - ❌ 无登录 / JWT、无 Celery、无多 Agent、无桌面端、无向量语义去重（按范围）
@@ -164,7 +166,7 @@ npm run dev
 | 核查 | `FACTCHECK_MAX_EVIDENCE_ROUNDS` `MAX_CLAIMS` `MAX_ARTICLE_CHARS` `MAX_FACTCHECK_INPUT_CHARS` `EVIDENCE_FETCH_TOP_N` |
 | 搜索 | `SEARCH_PROVIDER`（`google_news_rss` / `bing_rss`）`SEARCH_RESULT_LIMIT` `SEARCH_TIMEOUT_SECONDS` |
 | 爬虫 | `CRAWLER_TIMEOUT_SECONDS` `CRAWLER_PLAYWRIGHT_ENABLED` `PLAYWRIGHT_TIMEOUT_MS` `PLAYWRIGHT_BROWSER_CHANNEL` `ALLOW_PRIVATE_URLS` |
-| 社媒采集 | `SOCIAL_BROWSER_HEADLESS` `SOCIAL_BROWSER_TIMEOUT_MS` `SOCIAL_STATE_DIR` `SOCIAL_MAX_COMMENTS_DEFAULT` `SOCIAL_LOGIN_TIMEOUT_SECONDS` `SOCIAL_KEEPALIVE_HOURS` `XHS_COOKIE` `DOUYIN_COOKIE` `BILIBILI_COOKIE` |
+| 社媒采集 | `SOCIAL_BROWSER_HEADLESS` `SOCIAL_BROWSER_TIMEOUT_MS` `SOCIAL_STATE_DIR` `SOCIAL_MAX_COMMENTS_DEFAULT` `SOCIAL_LOGIN_TIMEOUT_SECONDS` `SOCIAL_KEEPALIVE_HOURS` `SOCIAL_FULL_MAX_COMMENTS` `XHS_COOKIE` `DOUYIN_COOKIE` `BILIBILI_COOKIE` |
 | 本机推送凭据 | `GITHUB_TOKEN` `GITEE_TOKEN`（仅本地 `.env`，应用不读取） |
 
 ## API
@@ -182,7 +184,10 @@ npm run dev
 | POST | `/api/v1/social/auth/login` | 打开可见浏览器，等待扫码并保存登录态 |
 | POST | `/api/v1/social/auth/logout` | 退出并删除本地登录态 |
 | POST | `/api/v1/social/auth/refresh` | 用现有登录态访问平台并刷新 Cookie |
-| POST | `/api/v1/social/fetch` | 获取社媒内容详情 + 评论 |
+| POST | `/api/v1/social/fetch` | 获取社媒内容详情 + 评论预览 |
+| POST | `/api/v1/social/jobs` | 创建后台全量评论采集任务 |
+| GET | `/api/v1/social/jobs/{id}` | 查询全量任务状态与已抓取数量 |
+| GET | `/api/v1/social/jobs/{id}/export?format=xlsx\|md\|txt` | 导出 Excel / Markdown / TXT |
 | GET | `/api/v1/graph/stats` | Neo4j 实体/关系规模 |
 
 ### 核查示例
@@ -227,6 +232,19 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 
 登录态只存在本机，目录已 gitignore。社媒采集会写入 PostgreSQL 的 `social_fetch_records` 快照表。
 
+### 全量评论与导出
+
+当视频有几万条评论时，不应把全部数据塞进一次短期请求。报告页提供“立即采集”和“获取全部评论”两档：
+
+- 快速采集：只取少量评论用于预览。
+- **一键获取完整评论**：创建 PostgreSQL 后台任务，服务端持续翻页/滚动并保存评论树；任务状态可通过 `GET /api/v1/social/jobs/{id}` 查询。
+- 平台限制：Bilibili 匿名接口通常只返回一部分主评论，登录后更完整；抖音/小红书浏览器会按页面可加载的评论持续滚动，平台风控可能截断。
+- 导出支持：
+  - **Excel (.xlsx)**：内容信息 + 评论明细，包含父子评论、层级、点赞、回复数、时间。
+  - **Markdown (.md)**：适合阅读与归档。
+  - **纯文本 (.txt)**：便于后处理。
+- 硬上限由 `SOCIAL_FULL_MAX_COMMENTS` 控制，默认 50,000；任务运行在应用进程内的后台任务器，不依赖 Celery（0.0.2 MVP）。
+
 ## 各模块验证方式
 
 | 模块 | 验证命令 / 方式 |
@@ -242,9 +260,11 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 | Bilibili 采集 | `POST /api/v1/social/fetch`，body 中的 URL 使用 B 站视频链接 |
 | 抖音采集 | 同上，使用抖音视频链接；首次会启动 Edge |
 | 小红书登录态 | 页面点登录，或运行 `scripts\social-login.bat xiaohongshu` |
+| 全量评论任务 | `POST /api/v1/social/jobs`，再轮询 `GET /api/v1/social/jobs/{id}` |
+| 导出文件 | `GET /api/v1/social/jobs/{id}/export?format=xlsx`（也支持 md/txt） |
 | 爬虫 | `.venv\Scripts\python.exe -m app.crawler.runner --url <公开文章URL> --output crawler-output.json` |
 | 数据库历史 | `GET /api/v1/factcheck/history` |
-| 后端测试 | `.venv\Scripts\python.exe -m pytest -q` → **18 passed** |
+| 后端测试 | `.venv\Scripts\python.exe -m pytest -q` → **20 passed** |
 | 后端静态检查 | `.venv\Scripts\ruff.exe check app scripts tests` → all checks passed |
 | 前端类型检查 | `cd frontend && npm run typecheck` |
 | 前端生产构建 | `npm run build` |
@@ -271,6 +291,8 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 - 社媒采集受平台风控影响：Bilibili 匿名接口只返回部分热门评论；抖音依赖页面结构；小红书必须有登录态。
 - 社媒登录态是平台 Cookie 的本地保存与定时访问续期，平台强制失效、改密或风控时仍需重新扫码登录，不能保证永久有效。
 - 社媒采集当前只支持按内容 URL 采集，不支持按关键词跨平台搜索/热榜抓取。
+- 全量任务目前是应用进程内后台任务；进程重启会中断运行中的任务。平台评论量和风控决定最终可获取数量，不能保证拿到平台显示的全部评论。
+- 全量结果完整保存在 PostgreSQL 快照中，导出文件可能较大；超大数据建议后续迁移到独立队列 + 对象存储。
 - 前端未做 SSR/PWA/桌面端，符合本期范围。
 
 ## 设计与验证记录

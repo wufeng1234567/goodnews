@@ -73,6 +73,20 @@ The storage state contains cookies and is git-ignored. Platform-side logout or
 forced invalidation can still require a fresh QR login; auto-refresh is
 best-effort, not a guarantee.
 
+## Full-comment jobs and export
+
+```text
+Social page -> POST /social/jobs -> in-process async worker
+  -> platform adapter (paginated comments + nested replies)
+  -> social_fetch_jobs (state/progress) + social_fetch_records (JSONB snapshot)
+  -> GET /social/jobs/{id}/export?format=xlsx|md|txt
+```
+
+Bilibili nested replies are fetched through `/x/v2/reply/reply`; Douyin/XHS
+repeat page scrolling until no new comments are observed. `SOCIAL_FULL_MAX_COMMENTS`
+is a hard safety cap. The in-process worker is an MVP trade-off; move it to a
+dedicated queue for multi-worker/production use.
+
 ## Explicit MVP boundaries
 
 - No login/JWT, no Celery, no multi-agent, no vector semantic dedupe.

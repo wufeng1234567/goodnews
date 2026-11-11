@@ -7,6 +7,7 @@ import SocialCommentList from '@/components/SocialCommentList.vue'
 import SocialContentCard from '@/components/SocialContentCard.vue'
 import { useSocialAuth } from '@/composables/useSocialAuth'
 import { useSocialFetch } from '@/composables/useSocialFetch'
+import { useSocialJobs } from '@/composables/useSocialJobs'
 import type { SocialAuthStatus, SocialPlatform } from '@/types'
 
 const url = ref('')
@@ -30,6 +31,13 @@ const {
   logout: logoutPlatform,
   switchAccount,
 } = useSocialAuth()
+const {
+  job: fullJob,
+  loading: fullJobLoading,
+  error: fullJobError,
+  start: startFullJob,
+  exportUrl: fullJobExportUrl,
+} = useSocialJobs()
 
 const authLabels: Record<SocialAuthStatus['state'], string> = {
   not_logged_in: '未登录',
@@ -102,6 +110,20 @@ const resultMeta = computed(() => {
 })
 
 const canSubmit = computed(() => url.value.trim().length > 0 && !loading.value)
+const fullJobLabel = computed(() => {
+  if (!fullJob.value) {
+    return ''
+  }
+  const labels: Record<typeof fullJob.value.state, string> = {
+    queued: '排队中',
+    running: '正在采集',
+    completed: '采集完成',
+    failed: '采集失败',
+    cancelled: '已取消',
+  }
+  return labels[fullJob.value.state]
+})
+const fullJobProgress = computed(() => fullJob.value?.progress ?? 0)
 
 onMounted(() => {
   void loadPlatforms()
@@ -112,6 +134,13 @@ async function handleSubmit(): Promise<void> {
     return
   }
   await submit(url.value, maxComments.value)
+}
+
+async function handleFullCollection(): Promise<void> {
+  const sourceUrl = result.value?.content.url || url.value
+  if (sourceUrl) {
+    await startFullJob(sourceUrl)
+  }
 }
 </script>
 
@@ -287,6 +316,63 @@ async function handleSubmit(): Promise<void> {
         :comments="result.comments"
         :has-more="result.has_more"
       />
+
+      <section class="full-collection gn-card">
+        <div class="full-collection__head">
+          <div>
+            <p class="gn-eyebrow">Full archive</p>
+            <h2 class="gn-serif">评论全量采集与导出</h2>
+            <p>
+              当前只是预览。全量模式会在后台持续翻页/滚动，完成后可导出 Excel、Markdown 或 TXT；
+              平台登录态、风控和评论总量会影响实际可获取数量。
+            </p>
+          </div>
+          <el-button
+            type="primary"
+            plain
+            :loading="fullJobLoading || fullJob?.state === 'running' || fullJob?.state === 'queued'"
+            :disabled="fullJobLoading || fullJob?.state === 'running' || fullJob?.state === 'queued'"
+            @click="handleFullCollection"
+          >
+            一键获取完整评论
+          </el-button>
+        </div>
+
+        <div v-if="fullJob" class="full-collection__status">
+          <div class="full-collection__line">
+            <el-tag
+              :type="fullJob.state === 'completed' ? 'success' : fullJob.state === 'failed' ? 'danger' : 'warning'"
+              effect="light"
+              round
+            >
+              {{ fullJobLabel }}
+            </el-tag>
+            <span>已抓取 {{ fullJob.total_fetched }} 条评论（含回复）</span>
+          </div>
+          <el-progress
+            v-if="fullJob.state === 'queued' || fullJob.state === 'running'"
+            :percentage="fullJobProgress"
+            :stroke-width="6"
+            :show-text="false"
+          />
+          <p v-if="fullJob.state === 'running' || fullJob.state === 'queued'" class="full-collection__hint">
+            任务在后台运行，可以继续浏览页面；完成后下方会出现下载按钮。
+          </p>
+          <div v-if="fullJob.state === 'completed'" class="export-actions">
+            <span>下载：</span>
+            <a :href="fullJobExportUrl('xlsx')" download>Excel (.xlsx)</a>
+            <a :href="fullJobExportUrl('md')" download>Markdown (.md)</a>
+            <a :href="fullJobExportUrl('txt')" download>纯文本 (.txt)</a>
+          </div>
+          <el-alert
+            v-if="fullJobError"
+            :title="fullJobError"
+            type="error"
+            :closable="false"
+            show-icon
+          />
+        </div>
+      </section>
     </template>
 
     <EmptyState
@@ -532,6 +618,82 @@ async function handleSubmit(): Promise<void> {
 .social-warnings {
   display: grid;
   gap: 8px;
+}
+
+.full-collection {
+  padding: 22px 24px;
+}
+
+.full-collection__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.full-collection__head h2 {
+  margin: 5px 0 5px;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.full-collection__head p:last-child {
+  max-width: 660px;
+  margin: 0;
+  color: var(--gn-muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.full-collection__head :deep(.el-button) {
+  flex: none;
+  border-radius: 10px;
+}
+
+.full-collection__status {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(222, 213, 198, 0.7);
+}
+
+.full-collection__line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--gn-ink-soft);
+  font-size: 11px;
+}
+
+.full-collection__hint {
+  margin: 0;
+  color: var(--gn-muted);
+  font-size: 10px;
+}
+
+.export-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--gn-muted);
+  font-size: 11px;
+}
+
+.export-actions a {
+  padding: 5px 10px;
+  border: 1px solid var(--gn-border);
+  border-radius: 8px;
+  color: var(--gn-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.export-actions a:hover {
+  border-color: var(--gn-accent);
+  background: var(--gn-accent-soft);
 }
 
 @keyframes spin {

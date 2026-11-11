@@ -124,10 +124,16 @@ class XiaohongshuAdapter:
                 logger.debug("XHS login overlay dismissal skipped: %s", exc)
 
             # XHS lazy-loads comments as the note panel is scrolled.
-            for _ in range(10):
+            target_comments = request.max_comments or 50_000
+            max_loops = 14 if target_comments <= 100 else min(500, 14 + target_comments // 5)
+            for _ in range(max_loops):
                 await page.mouse.wheel(0, 900)
                 await page.wait_for_timeout(800)
-                if sum(len(item.get("data", {}).get("comments", [])) for item in comment_payloads) >= request.max_comments:
+                loaded = sum(
+                    len(item.get("data", {}).get("comments", []))
+                    for item in comment_payloads
+                )
+                if loaded >= target_comments:
                     break
 
             if capture_tasks:
@@ -157,7 +163,7 @@ class XiaohongshuAdapter:
                     hint="确认笔记公开可访问，并运行小红书登录辅助脚本",
                 )
 
-        content = parse_xhs_content(note_data)
+        content = parse_xhs_content(note_data, source_url=page_url)
         comments, has_more = parse_xhs_comments(
             comment_payloads,
             content_id=content.content_id,
@@ -257,7 +263,7 @@ class XiaohongshuAdapter:
         return None
 
 
-def parse_xhs_content(note: dict[str, Any]) -> SocialContent:
+def parse_xhs_content(note: dict[str, Any], source_url: str | None = None) -> SocialContent:
     note_id = str(note.get("note_id") or note.get("id") or "")
     user = note.get("user") or {}
     interact = note.get("interact_info") or note.get("interact") or {}
@@ -265,7 +271,8 @@ def parse_xhs_content(note: dict[str, Any]) -> SocialContent:
     first_line = next((line.strip() for line in desc.splitlines() if line.strip()), "")
     title = str(note.get("display_title") or note.get("title") or first_line or "未命名笔记").strip()
     note_type = str(note.get("type") or "normal")
-    cover = _xhs_cover(note)
+    media_urls = _xhs_media_urls(note)
+    cover = media_urls[0] if media_urls else None
     tags = [
         str(tag.get("name"))
         for tag in (note.get("tag_list") or [])
@@ -280,7 +287,7 @@ def parse_xhs_content(note: dict[str, Any]) -> SocialContent:
         content_type=SocialContentType.VIDEO
         if note_type == "video"
         else SocialContentType.NOTE,
-        url=f"https://www.xiaohongshu.com/explore/{note_id}",
+        url=source_url or f"https://www.xiaohongshu.com/explore/{note_id}",
         title=title[:300],
         description=desc,
         author=SocialAuthor(
@@ -293,6 +300,7 @@ def parse_xhs_content(note: dict[str, Any]) -> SocialContent:
         ),
         published_at=published,
         cover_url=cover,
+        media_urls=media_urls,
         tags=tags,
         metrics=SocialMetrics(
             like_count=parse_count(interact.get("liked_count") or interact.get("like_count")),
@@ -394,21 +402,33 @@ def parse_xhs_dom_comments(
     ]
 
 
-def _xhs_cover(note: dict[str, Any]) -> str | None:
+def _xhs_media_urls(note: dict[str, Any]) -> list[str]:
+    """Collect all image URLs for an image note; videos expose their cover."""
     images = note.get("image_list") or note.get("images") or []
-    if images and isinstance(images[0], dict):
-        first = images[0]
-        return (
-            first.get("url_default")
-            or first.get("url")
-            or first.get("url_pre")
-            or _first_nested_url(first.get("info_list"))
+    urls: list[str] = []
+    for image in images:
+        if not isinstance(image, dict):
+            continue
+        url = (
+            image.get("url_default")
+            or image.get("url")
+            or image.get("url_pre")
+            or _first_nested_url(image.get("info_list"))
         )
-    video = note.get("video") or {}
-    cover = video.get("cover") or video.get("image") or {}
-    if isinstance(cover, dict):
-        return cover.get("url_default") or cover.get("url") or _first_nested_url(cover.get("url_list"))
-    return None
+        if url and url not in urls:
+            urls.append(str(url))
+    if not urls:
+        video = note.get("video") or {}
+        cover = video.get("cover") or video.get("image") or {}
+        if isinstance(cover, dict):
+            url = (
+                cover.get("url_default")
+                or cover.get("url")
+                or _first_nested_url(cover.get("url_list"))
+            )
+            if url:
+                urls.append(str(url))
+    return urls
 
 
 def _first_nested_url(value: Any) -> str | None:

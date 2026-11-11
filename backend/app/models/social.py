@@ -10,6 +10,7 @@ import re
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, Field, computed_field, field_validator
 
@@ -72,6 +73,7 @@ class SocialContent(BaseModel):
     author: SocialAuthor = Field(default_factory=SocialAuthor)
     published_at: datetime | None = None
     cover_url: str | None = None
+    media_urls: list[str] = Field(default_factory=list)
     duration_seconds: int | None = None
     tags: list[str] = Field(default_factory=list)
     metrics: SocialMetrics = Field(default_factory=SocialMetrics)
@@ -96,7 +98,9 @@ SocialComment.model_rebuild()
 
 class SocialFetchRequest(BaseModel):
     url: str = Field(min_length=5, max_length=2_000)
-    max_comments: int = Field(default=30, ge=1, le=200)
+    # 0 means "full collection" for the background job; quick previews use
+    # small positive values. The job service enforces a hard safety ceiling.
+    max_comments: int = Field(default=30, ge=0, le=50_000)
     include_replies: bool = True
 
     @field_validator("url")
@@ -110,6 +114,7 @@ class SocialFetchRequest(BaseModel):
 
 
 class SocialFetchResponse(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
     platform: SocialPlatform
     content: SocialContent
     comments: list[SocialComment] = Field(default_factory=list)
@@ -161,3 +166,41 @@ class SocialAuthStatusListResponse(BaseModel):
 
 class SocialAuthActionRequest(BaseModel):
     platform: SocialPlatform
+
+
+class SocialJobState(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class SocialJobCreateRequest(BaseModel):
+    url: str = Field(min_length=5, max_length=2_000)
+    include_replies: bool = True
+    # 0 means all available comments, bounded by the server ceiling.
+    max_comments: int = Field(default=0, ge=0, le=50_000)
+
+    @field_validator("url")
+    @classmethod
+    def extract_job_url(cls, value: str) -> str:
+        match = re.search(r"https?://[^\s\u3000]+", value.strip())
+        if not match:
+            raise ValueError("请粘贴小红书/抖音/Bilibili 的内容链接")
+        return match.group(0).rstrip("，。,.；;）)】]")
+
+
+class SocialJobStatus(BaseModel):
+    id: str
+    platform: SocialPlatform
+    url: str
+    state: SocialJobState
+    progress: int = Field(default=0, ge=0, le=100)
+    max_comments: int = 0
+    total_fetched: int = 0
+    record_id: str | None = None
+    error: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    finished_at: datetime | None = None

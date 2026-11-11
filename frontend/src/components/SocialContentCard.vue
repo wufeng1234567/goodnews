@@ -94,6 +94,7 @@ const authorMeta = computed(() => {
 
 const coverUrl = computed(() => props.content.cover_url || '')
 const contentLink = computed(() => props.content.url)
+const galleryUrls = computed(() => props.content.media_urls.slice(0, 6))
 </script>
 
 <template>
@@ -129,6 +130,17 @@ const contentLink = computed(() => props.content.url)
           <span v-for="tag in content.tags.slice(0, 8)" :key="tag" class="social-content__tag">
             #{{ tag }}
           </span>
+        </div>
+        <div v-if="galleryUrls.length > 1" class="social-content__gallery">
+          <a
+            v-for="(image, index) in galleryUrls"
+            :key="`${image}-${index}`"
+            :href="contentLink"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <img :src="image" :alt="`${content.title} 图片 ${index + 1}`" referrerpolicy="no-referrer" />
+          </a>
         </div>
       </div>
 
@@ -266,6 +278,28 @@ const contentLink = computed(() => props.content.url)
   background: var(--gn-paper);
   color: var(--gn-muted);
   font-size: 10px;
+}
+
+.social-content__gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.social-content__gallery a {
+  width: 70px;
+  height: 70px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--gn-paper-deep);
+}
+
+.social-content__gallery img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .social-content__cover {

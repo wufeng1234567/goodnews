@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.crawler.service import ScrapyArticleFetcher
 from app.db.repository import FactCheckRepository
 from app.db.session import Database
+from app.db.social_job_repository import SocialJobRepository
 from app.db.social_repository import SocialFetchRepository
 from app.graph.builder import build_factcheck_graph
 from app.graph.nodes import FactCheckNodes
@@ -26,6 +27,7 @@ from app.services.evidence_service import EvidenceService
 from app.services.factcheck_service import FactCheckService
 from app.services.search_service import SearchService
 from app.services.social_auth import SocialAuthManager
+from app.services.social_jobs import SocialJobService
 from app.services.social_service import SocialService
 
 
@@ -45,10 +47,13 @@ class AppContainer:
     social_service: SocialService
     social_repository: SocialFetchRepository
     social_auth_manager: SocialAuthManager
+    social_job_repository: SocialJobRepository
+    social_job_service: SocialJobService
     compiled_graph: Any = None
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     async def close(self) -> None:
+        await self.social_job_service.close()
         await self.social_auth_manager.close()
         await self.llm.aclose()
         await self.graph_repository.close()
@@ -91,6 +96,16 @@ async def build_container(settings: Settings) -> AppContainer:
     social_auth_manager = SocialAuthManager(settings)
     social_auth_manager.start_background()
     social_service = SocialService(settings, social_repository, social_auth_manager)
+    social_job_repository = SocialJobRepository(
+        database.session_factory, database.available
+    )
+    await social_job_repository.mark_interrupted()
+    social_job_service = SocialJobService(
+        social_service=social_service,
+        job_repo=social_job_repository,
+        record_repo=social_repository,
+        max_full_comments=settings.social_full_max_comments,
+    )
 
     return AppContainer(
         settings=settings,
@@ -107,5 +122,7 @@ async def build_container(settings: Settings) -> AppContainer:
         social_service=social_service,
         social_repository=social_repository,
         social_auth_manager=social_auth_manager,
+        social_job_repository=social_job_repository,
+        social_job_service=social_job_service,
         compiled_graph=compiled_graph,
     )

@@ -68,11 +68,21 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 
 :: social auth status (also available as login/logout buttons in the web UI)
 curl.exe http://127.0.0.1:8010/api/v1/social/auth/status
+
+:: full-comment background job
+curl.exe -X POST http://127.0.0.1:8010/api/v1/social/jobs ^
+  -H "Content-Type: application/json" ^
+  -d "{\"url\":\"https://www.bilibili.com/video/BV1MN4y177PB/\",\"max_comments\":0,\"include_replies\":true}"
+
+:: poll and export (replace JOB_ID)
+curl.exe http://127.0.0.1:8010/api/v1/social/jobs/JOB_ID
+curl.exe -o comments.xlsx "http://127.0.0.1:8010/api/v1/social/jobs/JOB_ID/export?format=xlsx"
 ```
 
 The login button opens a visible Edge window, waits for the platform login
 cookie, and saves a Playwright storage state under `backend/.browser-profiles/`.
 Logout deletes it; `SOCIAL_KEEPALIVE_HOURS` controls best-effort session refresh.
+Full comment jobs are persisted in `social_fetch_jobs`; export supports xlsx/md/txt and uses the saved snapshot (`SOCIAL_FULL_MAX_COMMENTS` caps the run).
 
 ## MVP temporary decisions / refactor points
 

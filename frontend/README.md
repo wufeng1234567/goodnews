@@ -5,7 +5,8 @@ All business requests live in `src/api/`; pages only compose components and
 composables. The social-platform page is `src/views/SocialView.vue`, backed by
 `src/stores/social.ts`, `src/stores/socialAuth.ts` and `src/api/social.ts`.
 Platform cards include login, logout and account-switch buttons plus automatic
-auth-status refresh.
+auth-status refresh. The social page can create a background full-comment job and
+download the result as xlsx, md or txt.
 
 ## Run
 

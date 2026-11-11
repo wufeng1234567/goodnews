@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+from urllib.parse import quote
+
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.api.deps import ContainerDep
 from app.models.social import (
@@ -11,6 +14,8 @@ from app.models.social import (
     SocialAuthStatusListResponse,
     SocialFetchRequest,
     SocialFetchResponse,
+    SocialJobCreateRequest,
+    SocialJobStatus,
     SocialPlatformListResponse,
 )
 from app.platforms.base import (
@@ -20,6 +25,7 @@ from app.platforms.base import (
     PlatformFetchError,
     SocialPlatformError,
 )
+from app.services.social_export import export_result
 
 router = APIRouter(prefix="/social", tags=["social"])
 
@@ -68,6 +74,61 @@ async def social_auth_refresh(
     container: ContainerDep,
 ) -> SocialAuthStatus:
     return await container.social_auth_manager.refresh(payload.platform)
+
+
+@router.post("/jobs", response_model=SocialJobStatus, status_code=status.HTTP_202_ACCEPTED)
+async def create_social_job(
+    payload: SocialJobCreateRequest,
+    container: ContainerDep,
+) -> SocialJobStatus:
+    try:
+        return await container.social_job_service.create(payload)
+    except PlatformDetectError as exc:
+        raise HTTPException(status_code=400, detail=_error_detail(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "job_unavailable", "message": str(exc)},
+        ) from exc
+
+
+@router.get("/jobs/{job_id}", response_model=SocialJobStatus)
+async def social_job_status(job_id: str, container: ContainerDep) -> SocialJobStatus:
+    job = await container.social_job_service.status(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="评论任务不存在")
+    return job
+
+
+@router.get("/jobs/{job_id}/export")
+async def export_social_job(
+    job_id: str,
+    container: ContainerDep,
+    format: Annotated[str, Query(pattern="^(xlsx|md|txt|excel|markdown|text)$")] = "xlsx",
+) -> Response:
+    job = await container.social_job_service.status(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="评论任务不存在")
+    if job.state.value != "completed":
+        raise HTTPException(status_code=409, detail="评论任务尚未完成")
+    result = await container.social_job_service.result(job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="任务结果不存在")
+    try:
+        exported = export_result(result, format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    suffix = exported.filename.rsplit(".", 1)[-1]
+    return Response(
+        content=exported.content,
+        media_type=exported.media_type,
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=goodnews-export.{suffix}; "
+                f"filename*=UTF-8''{quote(exported.filename)}"
+            ),
+        },
+    )
 
 
 @router.post("/fetch", response_model=SocialFetchResponse)

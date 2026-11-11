@@ -59,3 +59,28 @@ class SocialFetchRecord(Base):
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
+
+
+class SocialFetchJob(Base):
+    """Background full-comment collection job."""
+
+    __tablename__ = "social_fetch_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    platform: Mapped[str] = mapped_column(String(24), index=True)
+    url: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String(16), index=True)
+    max_comments: Mapped[int] = mapped_column(Integer, default=0)
+    total_fetched: Mapped[int] = mapped_column(Integer, default=0)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    record_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

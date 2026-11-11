@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -22,11 +21,11 @@ class SocialFetchRepository:
     def available(self) -> bool:
         return self._available and self._session_factory is not None
 
-    async def save(self, result: SocialFetchResponse) -> None:
+    async def save(self, result: SocialFetchResponse) -> bool:
         if not self.available or self._session_factory is None:
-            return
+            return False
         record = SocialFetchRecord(
-            id=str(uuid4()),
+            id=result.id,
             platform=result.platform.value,
             content_id=result.content.content_id[:128],
             url=result.content.url,
@@ -40,5 +39,16 @@ class SocialFetchRepository:
             async with self._session_factory() as session:
                 session.add(record)
                 await session.commit()
+            return True
         except Exception as exc:  # noqa: BLE001 - collection result must survive DB hiccups
             logger.warning("Failed to persist social snapshot: %s", exc)
+            return False
+
+    async def get(self, record_id: str) -> SocialFetchResponse | None:
+        if not self.available or self._session_factory is None:
+            return None
+        async with self._session_factory() as session:
+            record = await session.get(SocialFetchRecord, record_id)
+            if record is None:
+                return None
+            return SocialFetchResponse.model_validate(record.result)
