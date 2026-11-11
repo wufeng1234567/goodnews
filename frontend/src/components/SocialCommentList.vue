@@ -2,12 +2,14 @@
 import { computed } from 'vue'
 import EmptyState from './EmptyState.vue'
 import SocialCommentItem from './SocialCommentItem.vue'
-import type { SocialComment } from '@/types'
+import type { SocialComment, SocialPlatform } from '@/types'
 
 const props = withDefaults(
   defineProps<{
     comments: SocialComment[]
     hasMore?: boolean
+    platform?: SocialPlatform
+    contentId?: string
   }>(),
   {
     hasMore: false,
@@ -42,6 +44,8 @@ const totalCount = computed(() => countTree(props.comments))
         v-for="comment in comments"
         :key="comment.id"
         :comment="comment"
+        :platform="platform"
+        :content-id="contentId"
       />
     </div>
 

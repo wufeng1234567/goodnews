@@ -16,7 +16,9 @@ from app.models.social import (
     SocialFetchResponse,
     SocialJobCreateRequest,
     SocialJobStatus,
+    SocialPlatform,
     SocialPlatformListResponse,
+    SocialReplyResponse,
 )
 from app.platforms.base import (
     PlatformAuthRequired,
@@ -74,6 +76,36 @@ async def social_auth_refresh(
     container: ContainerDep,
 ) -> SocialAuthStatus:
     return await container.social_auth_manager.refresh(payload.platform)
+
+
+@router.get("/comments/replies", response_model=SocialReplyResponse)
+async def social_comment_replies(
+    container: ContainerDep,
+    platform: Annotated[SocialPlatform, Query()],
+    content_id: Annotated[str, Query(min_length=1, max_length=200)],
+    root_id: Annotated[str, Query(min_length=1, max_length=200)],
+    max_comments: Annotated[int, Query(ge=1, le=50_000)] = 50_000,
+) -> SocialReplyResponse:
+    if platform is not SocialPlatform.BILIBILI:
+        raise HTTPException(
+            status_code=501,
+            detail={
+                "code": "reply_api_unsupported",
+                "message": "该平台请通过全量评论任务获取完整子回复。",
+            },
+        )
+    adapter = container.social_service.adapter_for(platform)
+    replies = await adapter.fetch_root_replies(
+        content_id=content_id,
+        root_id=root_id,
+        max_comments=max_comments,
+    )
+    return SocialReplyResponse(
+        root_id=root_id,
+        replies=replies,
+        total_fetched=len(replies),
+        has_more=False,
+    )
 
 
 @router.post("/jobs", response_model=SocialJobStatus, status_code=status.HTTP_202_ACCEPTED)

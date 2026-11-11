@@ -191,6 +191,13 @@ class SocialJobCreateRequest(BaseModel):
         return match.group(0).rstrip("，。,.；;）)】]")
 
 
+class SocialReplyResponse(BaseModel):
+    root_id: str
+    replies: list[SocialComment] = Field(default_factory=list)
+    total_fetched: int = 0
+    has_more: bool = False
+
+
 class SocialJobStatus(BaseModel):
     id: str
     platform: SocialPlatform

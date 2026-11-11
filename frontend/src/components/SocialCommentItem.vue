@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { SocialComment } from '@/types'
+import { computed, ref } from 'vue'
+import { fetchSocialReplies } from '@/api/social'
+import { toApiError } from '@/api/client'
+import type { SocialComment, SocialPlatform } from '@/types'
 
 const props = withDefaults(
   defineProps<{
     comment: SocialComment
     depth?: number
+    platform?: SocialPlatform
+    contentId?: string
   }>(),
   {
     depth: 0,
@@ -13,6 +17,15 @@ const props = withDefaults(
 )
 
 const isReply = computed(() => props.depth > 0)
+const visibleReplies = computed(() => props.comment.replies.slice(0, 3))
+const replyTotal = computed(() =>
+  Math.max(props.comment.reply_count || 0, props.comment.replies.length),
+)
+const hasMoreReplies = computed(() => replyTotal.value > 3)
+const dialogVisible = ref(false)
+const loadingReplies = ref(false)
+const replyError = ref('')
+const dialogReplies = ref<SocialComment[]>([])
 
 function formatCount(value: number): string {
   if (value >= 10_000) {
@@ -38,6 +51,32 @@ function formatDate(value: string | null): string {
 }
 
 const initial = computed(() => props.comment.author_name.slice(0, 1) || '匿')
+
+async function openReplies(): Promise<void> {
+  dialogVisible.value = true
+  replyError.value = ''
+  dialogReplies.value = props.comment.replies
+  const declared = props.comment.reply_count || 0
+  if (
+    props.platform === 'bilibili' &&
+    props.contentId &&
+    declared > props.comment.replies.length
+  ) {
+    loadingReplies.value = true
+    try {
+      const response = await fetchSocialReplies(
+        props.platform,
+        props.contentId,
+        props.comment.id,
+      )
+      dialogReplies.value = response.replies
+    } catch (caught: unknown) {
+      replyError.value = toApiError(caught).message
+    } finally {
+      loadingReplies.value = false
+    }
+  }
+}
 </script>
 
 <template>
@@ -56,16 +95,74 @@ const initial = computed(() => props.comment.author_name.slice(0, 1) || '匿')
         <span v-if="comment.reply_count">回复 {{ formatCount(comment.reply_count) }}</span>
       </div>
 
-      <div v-if="comment.replies.length" class="comment__replies">
+      <div v-if="visibleReplies.length" class="comment__replies">
         <SocialCommentItem
-          v-for="reply in comment.replies"
+          v-for="reply in visibleReplies"
           :key="reply.id"
           :comment="reply"
           :depth="depth + 1"
+          :platform="platform"
+          :content-id="contentId"
         />
       </div>
+      <button
+        v-if="hasMoreReplies"
+        type="button"
+        class="comment__more"
+        @click="openReplies"
+      >
+        查看更多回复（{{ formatCount(replyTotal) }}）
+      </button>
     </div>
   </article>
+
+  <el-dialog
+    v-model="dialogVisible"
+    :title="`${comment.author_name} 的完整评论`"
+    width="min(760px, 92vw)"
+    append-to-body
+    class="reply-dialog"
+  >
+    <div class="reply-dialog__scroll">
+      <div class="reply-dialog__parent">
+        <div class="reply-dialog__parent-head">
+          <strong>{{ comment.author_name }}</strong>
+          <span>{{ formatDate(comment.created_at) }}</span>
+        </div>
+        <p>{{ comment.text }}</p>
+        <div class="reply-dialog__parent-meta">
+          <span>赞 {{ formatCount(comment.like_count) }}</span>
+          <span>回复 {{ formatCount(comment.reply_count) }}</span>
+        </div>
+      </div>
+
+      <div class="reply-dialog__heading">
+        <span>全部子回复</span>
+        <span v-if="loadingReplies">加载中…</span>
+        <span v-else>{{ dialogReplies.length }} 条已加载</span>
+      </div>
+      <div v-if="dialogReplies.length" class="reply-dialog__list">
+        <SocialCommentItem
+          v-for="reply in dialogReplies"
+          :key="reply.id"
+          :comment="reply"
+          :depth="1"
+          :platform="platform"
+          :content-id="contentId"
+        />
+      </div>
+      <p v-else class="reply-dialog__empty">暂无已加载的子回复。</p>
+      <p v-if="loadingReplies" class="reply-dialog__loading">正在加载完整子回复…</p>
+      <p v-if="replyError" class="reply-dialog__error">{{ replyError }}</p>
+      <p
+        v-else-if="!loadingReplies && replyTotal > dialogReplies.length"
+        class="reply-dialog__note"
+      >
+        平台回复总数约 {{ formatCount(replyTotal) }} 条，当前仅加载
+        {{ dialogReplies.length }} 条。可使用“一键获取完整评论”后台任务导出完整数据。
+      </p>
+    </div>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -144,7 +241,100 @@ const initial = computed(() => props.comment.author_name.slice(0, 1) || '匿')
   font-size: 11px;
 }
 
+.comment__more {
+  margin-top: 7px;
+  padding: 0;
+  border: 0;
+  color: var(--gn-accent);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.comment__more:hover {
+  text-decoration: underline;
+}
+
 .comment.is-reply {
   border-top: 0;
+}
+
+.reply-dialog__scroll {
+  height: 62vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.reply-dialog__parent {
+  padding: 14px 16px;
+  border: 1px solid var(--gn-border);
+  border-radius: 10px;
+  background: var(--gn-paper);
+}
+
+.reply-dialog__parent-head,
+.reply-dialog__parent-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--gn-muted);
+  font-size: 10px;
+}
+
+.reply-dialog__parent-head strong {
+  color: var(--gn-ink);
+  font-size: 12px;
+}
+
+.reply-dialog__parent p {
+  margin: 8px 0;
+  color: var(--gn-ink);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.reply-dialog__parent-meta {
+  gap: 14px;
+  font-size: 9px;
+}
+
+.reply-dialog__heading {
+  display: flex;
+  justify-content: space-between;
+  margin: 18px 0 4px;
+  color: var(--gn-ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.reply-dialog__heading span:last-child {
+  color: var(--gn-muted);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.reply-dialog__list {
+  padding-left: 4px;
+}
+
+.reply-dialog__list :deep(.comment) {
+  padding: 10px 0;
+}
+
+.reply-dialog__empty,
+.reply-dialog__loading,
+.reply-dialog__note {
+  margin: 12px 0;
+  color: var(--gn-muted);
+  font-size: 11px;
+}
+
+.reply-dialog__error {
+  margin: 12px 0;
+  color: var(--gn-accent);
+  font-size: 11px;
 }
 </style>

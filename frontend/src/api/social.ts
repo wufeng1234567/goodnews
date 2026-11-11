@@ -8,6 +8,7 @@ import type {
   SocialJobStatus,
   SocialPlatform,
   SocialPlatformListResponse,
+  SocialReplyResponse,
 } from '@/types'
 
 export async function fetchSocialContent(
@@ -55,6 +56,22 @@ export async function createSocialJob(
 
 export async function getSocialJob(jobId: string): Promise<SocialJobStatus> {
   const { data } = await apiClient.get<SocialJobStatus>(`/social/jobs/${jobId}`)
+  return data
+}
+
+export async function fetchSocialReplies(
+  platform: SocialPlatform,
+  contentId: string,
+  rootId: string,
+): Promise<SocialReplyResponse> {
+  const { data } = await apiClient.get<SocialReplyResponse>('/social/comments/replies', {
+    params: {
+      platform,
+      content_id: contentId,
+      root_id: rootId,
+      max_comments: 50_000,
+    },
+  })
   return data
 }
 

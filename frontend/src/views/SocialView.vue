@@ -315,6 +315,8 @@ async function handleFullCollection(): Promise<void> {
       <SocialCommentList
         :comments="result.comments"
         :has-more="result.has_more"
+        :platform="result.platform"
+        :content-id="result.content.content_id"
       />
 
       <section class="full-collection gn-card">

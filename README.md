@@ -21,6 +21,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 ![goodnews 小红书登录提示](docs/screenshots/06-social-xhs-auth.png)
 ![goodnews 平台账号登录](docs/screenshots/07-social-login.png)
 ![goodnews 全量评论与导出](docs/screenshots/08-social-full-export.png)
+![goodnews 完整回复弹窗](docs/screenshots/09-social-reply-dialog.png)
 
 ## 当前实现范围
 
@@ -33,6 +34,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 - ✅ 小红书 / 抖音 / Bilibili 内容 + 评论统一采集（浏览器登录态可选）
 - ✅ 三平台网页内登录、退出、切换账号、登录态持久化与过期检测
 - ✅ 后台全量评论任务、Excel/Markdown/TXT 导出、B 站楼中楼分页
+- ✅ 子回复超过 3 条自动折叠，点击打开固定高度“完整父评论 + 子回复”弹窗
 - ✅ PostgreSQL 持久化核查与社媒采集快照；pgvector 仅建占位表不使用
 - ✅ Redis 仅作搜索缓存
 - ❌ 无登录 / JWT、无 Celery、无多 Agent、无桌面端、无向量语义去重（按范围）
@@ -188,6 +190,7 @@ npm run dev
 | POST | `/api/v1/social/jobs` | 创建后台全量评论采集任务 |
 | GET | `/api/v1/social/jobs/{id}` | 查询全量任务状态与已抓取数量 |
 | GET | `/api/v1/social/jobs/{id}/export?format=xlsx\|md\|txt` | 导出 Excel / Markdown / TXT |
+| GET | `/api/v1/social/comments/replies` | B站单条父评论的完整楼中楼 |
 | GET | `/api/v1/graph/stats` | Neo4j 实体/关系规模 |
 
 ### 核查示例
@@ -231,6 +234,8 @@ curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
 5. 后台服务每 `SOCIAL_KEEPALIVE_HOURS` 小时用现有登录态访问一次平台并保存刷新后的 Cookie，尽量延长会话。平台强制失效、改密或风控仍需要重新登录一次，无法保证永久免登录。
 
 登录态只存在本机，目录已 gitignore。社媒采集会写入 PostgreSQL 的 `social_fetch_records` 快照表。
+
+评论采集的原理、实测和不可行方案记录在 [社媒评论全量采集方案](docs/social-comment-strategy.md)。
 
 ### 全量评论与导出
 

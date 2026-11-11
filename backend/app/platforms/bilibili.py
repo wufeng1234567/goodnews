@@ -201,6 +201,31 @@ class BilibiliAdapter:
 
         return comments, total_count > len(comments)
 
+    async def fetch_root_replies(
+        self,
+        *,
+        content_id: str,
+        root_id: str,
+        max_comments: int = 50_000,
+    ) -> list[SocialComment]:
+        """Fetch the complete reply tree for one Bilibili root comment."""
+        video_id = self.extract_video_id(content_id)
+        async with httpx.AsyncClient(
+            headers=self._headers(),
+            timeout=25,
+            follow_redirects=True,
+        ) as client:
+            view_params = {"bvid": video_id} if video_id.startswith("BV") else {"aid": video_id[2:]}
+            video = await self._get_json(
+                client, "https://api.bilibili.com/x/web-interface/view", view_params
+            )
+            return await self._fetch_sub_replies(
+                client,
+                int(video["aid"]),
+                root_id,
+                max_comments,
+            )
+
     async def _fetch_sub_replies(
         self,
         client: httpx.AsyncClient,

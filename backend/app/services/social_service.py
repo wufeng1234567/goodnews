@@ -46,6 +46,9 @@ class SocialService:
             SocialPlatform.XIAOHONGSHU: XiaohongshuAdapter(settings),
         }
 
+    def adapter_for(self, platform: SocialPlatform) -> Any:
+        return self._adapters[platform]
+
     def platform_list(self) -> SocialPlatformListResponse:
         notes = {
             SocialPlatform.BILIBILI: "公开 API；支持视频详情、统计数据和评论。",

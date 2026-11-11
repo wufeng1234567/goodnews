@@ -114,6 +114,13 @@ export interface SocialJobCreateRequest {
   max_comments: number
 }
 
+export interface SocialReplyResponse {
+  root_id: string
+  replies: SocialComment[]
+  total_fetched: number
+  has_more: boolean
+}
+
 export interface SocialJobStatus {
   id: string
   platform: SocialPlatform
