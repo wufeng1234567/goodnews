@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { title: '热点探索 · goodnews' },
     },
     {
+      path: '/social',
+      name: 'social',
+      component: () => import('@/views/SocialView.vue'),
+      meta: { title: '平台采集 · goodnews' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },

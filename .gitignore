@@ -20,6 +20,7 @@ backend/.venv/
 backend/build/
 backend/dist/
 backend/*.egg-info/
+backend/.browser-profiles/
 *.egg-info/
 
 # ===== Node / Vue =====

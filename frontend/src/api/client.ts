@@ -3,17 +3,29 @@ import axios, { type AxiosError } from 'axios'
 interface ErrorDetail {
   code?: string
   message?: string
+  hint?: string
+  platform?: string
 }
 
 export class ApiError extends Error {
   readonly status: number | null
   readonly code: string | null
+  readonly hint: string | null
+  readonly platform: string | null
 
-  constructor(message: string, status: number | null = null, code: string | null = null) {
+  constructor(
+    message: string,
+    status: number | null = null,
+    code: string | null = null,
+    hint: string | null = null,
+    platform: string | null = null,
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.hint = hint
+    this.platform = platform
   }
 }
 
@@ -33,6 +45,8 @@ function readDetail(data: unknown): ErrorDetail | null {
     return {
       code: typeof detail.code === 'string' ? detail.code : undefined,
       message: typeof detail.message === 'string' ? detail.message : undefined,
+      hint: typeof detail.hint === 'string' ? detail.hint : undefined,
+      platform: typeof detail.platform === 'string' ? detail.platform : undefined,
     }
   }
   return null
@@ -53,6 +67,8 @@ export function toApiError(error: unknown): ApiError {
       detail?.message || fallback,
       axiosError.response?.status ?? null,
       detail?.code ?? null,
+      detail?.hint ?? null,
+      detail?.platform ?? null,
     )
   }
   return new ApiError(error instanceof Error ? error.message : '未知错误')

@@ -2,7 +2,8 @@
 
 Vue 3 Composition API + TypeScript + Vite + Pinia + Vue Router + Element Plus.
 All business requests live in `src/api/`; pages only compose components and
-composables.
+composables. The social-platform page is `src/views/SocialView.vue`, backed by
+`src/stores/social.ts` and `src/api/social.ts`.
 
 ## Run
 
@@ -13,7 +14,7 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:5173`. In development, Vite proxies `/api` to
-`http://127.0.0.1:8000`, so no frontend secret or CORS token is needed.
+`http://127.0.0.1:8010`, so no frontend secret or CORS token is needed.
 
 ## Verify
 

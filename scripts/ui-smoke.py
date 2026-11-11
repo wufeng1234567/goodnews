@@ -1,7 +1,7 @@
 """Repeatable browser smoke test for the goodnews UI.
 
 Prerequisites:
-  * backend on http://127.0.0.1:8000
+  * backend on http://127.0.0.1:8010
   * frontend dev server on http://127.0.0.1:5173
   * Python Playwright installed (backend venv)
 

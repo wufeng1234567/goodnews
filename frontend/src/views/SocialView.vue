@@ -1,0 +1,383 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import PlatformBadge from '@/components/PlatformBadge.vue'
+import SocialCommentList from '@/components/SocialCommentList.vue'
+import SocialContentCard from '@/components/SocialContentCard.vue'
+import { useSocialFetch } from '@/composables/useSocialFetch'
+
+const url = ref('')
+const maxComments = ref(30)
+const {
+  result,
+  platforms,
+  loading,
+  error,
+  errorHint,
+  errorCode,
+  loadPlatforms,
+  submit,
+} = useSocialFetch()
+
+const showAuthHelp = computed(() => errorCode.value === 'platform_auth_required')
+const resultMeta = computed(() => {
+  if (!result.value) {
+    return ''
+  }
+  const methodLabels: Record<typeof result.value.collection_method, string> = {
+    public_api: '公开 API',
+    browser_api: '浏览器原请求',
+    browser_dom: '页面 DOM 兜底',
+  }
+  const authLabels: Record<typeof result.value.auth_mode, string> = {
+    none: '匿名会话',
+    cookie: 'Cookie 登录态',
+    storage_state: '浏览器登录态',
+  }
+  return `${methodLabels[result.value.collection_method]} · ${authLabels[result.value.auth_mode]}`
+})
+
+const canSubmit = computed(() => url.value.trim().length > 0 && !loading.value)
+
+onMounted(() => {
+  void loadPlatforms()
+})
+
+async function handleSubmit(): Promise<void> {
+  if (!canSubmit.value) {
+    return
+  }
+  await submit(url.value, maxComments.value)
+}
+</script>
+
+<template>
+  <div class="social-page">
+    <header class="social-head">
+      <p class="gn-eyebrow">Social ingestion</p>
+      <h1 class="gn-serif">把社媒内容，<em>连评论一起取回来。</em></h1>
+      <p class="social-head__lede">
+        粘贴小红书、抖音或 Bilibili 的内容链接，自动提取标题、作者、热度数据和评论。
+        只采集公开页面，不绕过登录或付费墙。
+      </p>
+    </header>
+
+    <section v-if="platforms.length" class="platform-strip">
+      <article v-for="item in platforms" :key="item.platform" class="platform-note">
+        <PlatformBadge :platform="item.platform" />
+        <p>{{ item.note }}</p>
+      </article>
+    </section>
+
+    <section class="social-form gn-card">
+      <div class="social-form__head">
+        <div>
+          <p class="gn-eyebrow">Paste a link</p>
+          <h2 class="gn-serif">内容 + 评论一次采集</h2>
+        </div>
+        <span class="social-form__supported">XHS / DY / BILI</span>
+      </div>
+
+      <el-input
+        v-model="url"
+        type="textarea"
+        :autosize="{ minRows: 2, maxRows: 5 }"
+        resize="none"
+        maxlength="2000"
+        placeholder="粘贴内容链接，或直接粘贴包含链接的分享文案……"
+        @keydown.ctrl.enter.prevent="handleSubmit"
+        @keydown.meta.enter.prevent="handleSubmit"
+      />
+
+      <div class="social-form__footer">
+        <div class="social-form__limit">
+          <span>抓取评论数</span>
+          <el-select v-model="maxComments" size="small" style="width: 100px">
+            <el-option :value="20" label="20 条" />
+            <el-option :value="30" label="30 条" />
+            <el-option :value="50" label="50 条" />
+            <el-option :value="100" label="100 条" />
+          </el-select>
+        </div>
+        <el-button type="primary" size="large" :loading="loading" :disabled="!canSubmit" @click="handleSubmit">
+          获取内容与评论
+        </el-button>
+      </div>
+    </section>
+
+    <section v-if="error" class="social-error gn-card">
+      <el-alert :title="error" type="warning" :closable="false" show-icon />
+      <template v-if="showAuthHelp">
+        <p class="social-error__label">完成平台登录后再试：</p>
+        <code class="social-error__command">{{ errorHint || 'scripts\\social-login.bat xiaohongshu' }}</code>
+        <p class="social-error__note">
+          登录脚本会在本机打开 Edge，扫码完成后把登录态保存到本地，不会写入 Git。
+        </p>
+      </template>
+      <p v-else-if="errorHint" class="social-error__note">{{ errorHint }}</p>
+    </section>
+
+    <section v-if="loading" class="social-loading gn-card">
+      <div class="social-loading__head">
+        <span class="social-loading__pulse" />
+        <div>
+          <p class="gn-eyebrow">Collecting</p>
+          <h2 class="gn-serif">正在打开平台并抓取评论</h2>
+          <p>抖音/小红书使用浏览器会话，通常需要 10–30 秒，请保持页面打开。</p>
+        </div>
+      </div>
+      <LoadingSkeleton :rows="3" />
+    </section>
+
+    <template v-else-if="result">
+      <div class="result-meta">
+        <span>{{ resultMeta }}</span>
+        <span>本次 {{ result.total_comments_fetched }} 条评论</span>
+        <span v-if="result.content.content_id">ID {{ result.content.content_id }}</span>
+      </div>
+
+      <SocialContentCard :content="result.content" />
+
+      <div v-if="result.warnings.length" class="social-warnings">
+        <el-alert
+          v-for="warning in result.warnings"
+          :key="warning"
+          :title="warning"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+      </div>
+
+      <SocialCommentList
+        :comments="result.comments"
+        :has-more="result.has_more"
+      />
+    </template>
+
+    <EmptyState
+      v-else-if="!error"
+      title="还没有采集内容"
+      description="从上面的输入框粘贴一条链接。Bilibili 与抖音可直接采集，小红书需要先完成登录。"
+    />
+  </div>
+</template>
+
+<style scoped>
+.social-page {
+  display: grid;
+  gap: 20px;
+  padding-top: 18px;
+}
+
+.social-head {
+  max-width: 860px;
+  padding: 8px 4px 2px;
+}
+
+.social-head h1 {
+  margin: 10px 0 13px;
+  font-size: clamp(42px, 6.3vw, 72px);
+  font-weight: 700;
+  letter-spacing: -0.07em;
+  line-height: 1.03;
+}
+
+.social-head h1 em {
+  color: var(--gn-accent);
+  font-style: normal;
+}
+
+.social-head__lede {
+  max-width: 700px;
+  margin: 0;
+  color: var(--gn-ink-soft);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.platform-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.platform-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid var(--gn-border);
+  border-radius: 12px;
+  background: rgba(255, 253, 248, 0.55);
+}
+
+.platform-note p {
+  margin: 2px 0 0;
+  color: var(--gn-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.social-form {
+  padding: 24px;
+}
+
+.social-form__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.social-form__head h2 {
+  margin: 5px 0 0;
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.social-form__supported {
+  color: var(--gn-muted);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.social-form :deep(.el-textarea__inner) {
+  padding: 14px;
+  border-radius: 12px;
+  border-color: var(--gn-border);
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.social-form__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.social-form__limit {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--gn-muted);
+  font-size: 11px;
+}
+
+.social-form__footer :deep(.el-button) {
+  min-width: 152px;
+  border-radius: 11px;
+}
+
+.social-error {
+  padding: 18px;
+}
+
+.social-error__label {
+  margin: 14px 0 5px;
+  color: var(--gn-ink-soft);
+  font-size: 11px;
+}
+
+.social-error__command {
+  display: inline-block;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: var(--gn-ink);
+  color: var(--gn-paper);
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.social-error__note {
+  margin: 8px 0 0;
+  color: var(--gn-muted);
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.social-loading {
+  padding: 22px;
+}
+
+.social-loading__head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.social-loading__head h2 {
+  margin: 4px 0 4px;
+  font-size: 21px;
+  letter-spacing: -0.03em;
+}
+
+.social-loading__head p:last-child {
+  margin: 0;
+  color: var(--gn-muted);
+  font-size: 11px;
+}
+
+.social-loading__pulse {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--gn-accent-soft);
+  border-top-color: var(--gn-accent);
+  animation: spin 0.9s linear infinite;
+}
+
+.result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 0 4px;
+  color: var(--gn-muted);
+  font-family: monospace;
+  font-size: 9px;
+}
+
+.social-warnings {
+  display: grid;
+  gap: 8px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 800px) {
+  .platform-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .social-head h1 {
+    font-size: 44px;
+  }
+
+  .social-form {
+    padding: 18px;
+  }
+
+  .social-form__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .social-form__footer :deep(.el-button) {
+    width: 100%;
+  }
+}
+</style>

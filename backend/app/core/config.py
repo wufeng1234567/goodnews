@@ -91,6 +91,17 @@ class Settings(BaseSettings):
     playwright_browser_channel: str = "msedge"
     allow_private_urls: bool = False
 
+    # Social platforms ---------------------------------------------------
+    social_browser_headless: bool = True
+    social_browser_timeout_ms: int = 45_000
+    social_state_dir: str = "backend/.browser-profiles"
+    social_max_comments_default: int = 30
+    # Optional raw Cookie headers. Prefer the login helper which writes a
+    # Playwright storage-state file; these values are only for deployment.
+    xhs_cookie: SecretStr = SecretStr("")
+    douyin_cookie: SecretStr = SecretStr("")
+    bilibili_cookie: SecretStr = SecretStr("")
+
     @field_validator("llm_temperature")
     @classmethod
     def validate_temperature(cls, value: float) -> float:
@@ -124,6 +135,13 @@ class Settings(BaseSettings):
     @property
     def llm_api_key(self) -> str:
         return self.deepseek_api_key.get_secret_value()
+
+    @property
+    def social_state_path(self) -> Path:
+        state_dir = Path(self.social_state_dir)
+        if not state_dir.is_absolute():
+            state_dir = PROJECT_ROOT / state_dir
+        return state_dir.resolve()
 
 
 @lru_cache(maxsize=1)

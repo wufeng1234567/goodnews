@@ -16,8 +16,9 @@ it. See the repository-root `.env.example` for every supported variable.
 | `app/llm/` | the only OpenAI SDK gateway (`LLMClient`) |
 | `app/knowledge_graph/` | async Neo4j driver, Cypher repository, deterministic verification, seed data |
 | `app/crawler/` | Scrapy spider, scrapy-playwright fallback, trafilatura extraction |
-| `app/models/` | Pydantic API / LLM / state contracts |
-| `app/db/` | SQLAlchemy 2 async engine and history repository |
+| `app/platforms/` | Xiaohongshu / Douyin / Bilibili adapters + browser login state |
+| `app/models/` | Pydantic API / LLM / state / social contracts |
+| `app/db/` | SQLAlchemy 2 async engine, history and social snapshot repositories |
 
 ## Install and run (Windows)
 
@@ -27,7 +28,7 @@ D:\Python3.11\python.exe -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 ..\scripts\start-neo4j.bat
 .venv\Scripts\python.exe -m scripts.seed_graph
-.venv\Scripts\uvicorn.exe app.main:app --reload --host 127.0.0.1 --port 8000
+.venv\Scripts\uvicorn.exe app.main:app --host 127.0.0.1 --port 8010
 ```
 
 Or from the repository root: `scripts\start-backend.bat`.
@@ -36,14 +37,14 @@ Or from the repository root: `scripts\start-backend.bat`.
 
 ```bat
 :: health + graph stats
-curl.exe http://127.0.0.1:8000/api/v1/health
-curl.exe http://127.0.0.1:8000/api/v1/graph/stats
+curl.exe http://127.0.0.1:8010/api/v1/health
+curl.exe http://127.0.0.1:8010/api/v1/graph/stats
 
 :: real DeepSeek JSON-mode check
 .venv\Scripts\python.exe -m scripts.check_llm
 
 :: real five-node fact-check
-curl.exe -X POST http://127.0.0.1:8000/api/v1/factcheck ^
+curl.exe -X POST http://127.0.0.1:8010/api/v1/factcheck ^
   -H "Content-Type: application/json" ^
   -d "{\"input_type\":\"text\",\"content\":\"埃菲尔铁塔位于柏林。\",\"max_evidence_rounds\":0}"
 
@@ -56,6 +57,14 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/factcheck ^
 
 :: JS-rendered fallback (uses Windows Edge by default)
 .venv\Scripts\python.exe -m app.crawler.runner --url https://quotes.toscrape.com/js/ --output crawler-output.json --playwright --browser-channel msedge
+
+:: social platforms: Bilibili
+curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
+  -H "Content-Type: application/json" ^
+  -d "{\"url\":\"https://www.bilibili.com/video/BV1gHWg6GEqj\",\"max_comments\":20,\"include_replies\":true}"
+
+:: social platforms: Xiaohongshu login helper (first run only)
+..\scripts\social-login.bat xiaohongshu
 ```
 
 ## MVP temporary decisions / refactor points
@@ -72,3 +81,10 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/factcheck ^
 - Neo4j graph has 41 manually seeded entities / 30 relations. Empty or
   unmapped graphs always return `insufficient`; the LLM cannot invent a
   graph-backed verdict.
+- Social adapters only read public pages through platform-native browser
+  requests; they do not bypass login, paywalls or captchas. Xiaohongshu needs
+  a local Playwright storage state; Douyin and Bilibili work anonymously in
+  the tested scenarios, with Bilibili's anonymous comment endpoint limited to
+  a small set of hot top-level comments.
+- `social_fetch_records` stores normalized content/comment DTOs as JSONB. No
+  raw signed URLs or platform cookies are persisted.

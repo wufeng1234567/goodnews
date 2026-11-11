@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.crawler.service import ScrapyArticleFetcher
 from app.db.repository import FactCheckRepository
 from app.db.session import Database
+from app.db.social_repository import SocialFetchRepository
 from app.graph.builder import build_factcheck_graph
 from app.graph.nodes import FactCheckNodes
 from app.knowledge_graph.repository import Neo4jRepository
@@ -24,6 +25,7 @@ from app.services.cache import RedisCache
 from app.services.evidence_service import EvidenceService
 from app.services.factcheck_service import FactCheckService
 from app.services.search_service import SearchService
+from app.services.social_service import SocialService
 
 
 @dataclass
@@ -39,6 +41,8 @@ class AppContainer:
     evidence_service: EvidenceService
     factcheck_service: FactCheckService
     factcheck_repository: FactCheckRepository
+    social_service: SocialService
+    social_repository: SocialFetchRepository
     compiled_graph: Any = None
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -78,6 +82,10 @@ async def build_container(settings: Settings) -> AppContainer:
         database.session_factory, database.available
     )
     factcheck_service = FactCheckService(settings, compiled_graph, factcheck_repository)
+    social_repository = SocialFetchRepository(
+        database.session_factory, database.available
+    )
+    social_service = SocialService(settings, social_repository)
 
     return AppContainer(
         settings=settings,
@@ -91,5 +99,7 @@ async def build_container(settings: Settings) -> AppContainer:
         evidence_service=evidence_service,
         factcheck_service=factcheck_service,
         factcheck_repository=factcheck_repository,
+        social_service=social_service,
+        social_repository=social_repository,
         compiled_graph=compiled_graph,
     )

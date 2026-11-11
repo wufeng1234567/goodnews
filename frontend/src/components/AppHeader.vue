@@ -16,6 +16,7 @@ import { RouterLink } from 'vue-router'
       <nav class="nav" aria-label="主导航">
         <RouterLink class="nav__link" exact-active-class="is-active" to="/">核查台</RouterLink>
         <RouterLink class="nav__link" active-class="is-active" to="/explore">热点探索</RouterLink>
+        <RouterLink class="nav__link" active-class="is-active" to="/social">平台采集</RouterLink>
       </nav>
 
       <span class="status-pill">

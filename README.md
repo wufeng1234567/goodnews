@@ -1,6 +1,6 @@
 # goodnews
 
-> 新闻热点搜索 + 信息探索 + 假新闻分析平台 MVP
+> 新闻热点搜索 + 信息探索 + 假新闻分析 + 社媒内容/评论采集平台 MVP
 >
 > **先别转发，先核实。**
 
@@ -8,11 +8,17 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 `fetch_article → extract_claims → retrieve_evidence → graph_verify → adjudicate`
 五个节点，输出带证据、逐条主张、图谱校验和推理过程的结构化裁决。
 
+0.0.2 第一阶段已加入 **小红书 / 抖音 / Bilibili 社媒采集**：输入内容链接，
+统一获取内容标题、作者、热度指标和评论（含楼中楼）。
+
 ## 界面预览
 
 ![goodnews 核查台](docs/screenshots/01-home.png)
 ![goodnews 热点探索](docs/screenshots/02-explore.png)
 ![goodnews 核查报告](docs/screenshots/03-report.png)
+![goodnews Bilibili 采集](docs/screenshots/04-social-bilibili.png)
+![goodnews 抖音采集](docs/screenshots/05-social-douyin.png)
+![goodnews 小红书登录提示](docs/screenshots/06-social-xhs-auth.png)
 
 ## 当前实现范围
 
@@ -22,7 +28,8 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 - ✅ 手搓 OpenAI SDK `llm_client`（默认 DeepSeek，JSON 模式 / 重试 / 流式能力）
 - ✅ Neo4j 异步驱动 + Cypher 仓库 + 确定性图谱校验
 - ✅ Scrapy + scrapy-playwright + trafilatura 正文提取
-- ✅ PostgreSQL 持久化核查历史；pgvector 仅建占位表不使用
+- ✅ 小红书 / 抖音 / Bilibili 内容 + 评论统一采集（浏览器登录态可选）
+- ✅ PostgreSQL 持久化核查与社媒采集快照；pgvector 仅建占位表不使用
 - ✅ Redis 仅作搜索缓存
 - ❌ 无登录 / JWT、无 Celery、无多 Agent、无桌面端、无向量语义去重（按范围）
 
@@ -36,7 +43,7 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 | LLM | OpenAI Python SDK，默认 `https://api.deepseek.com` / `deepseek-chat` |
 | 数据 | PostgreSQL 16 + SQLAlchemy 2 async + asyncpg；pgvector 占位 |
 | 图谱 | Neo4j 5.26 Community，官方 `neo4j` async driver |
-| 采集 | Scrapy、scrapy-playwright、trafilatura、Google News URL 解析 |
+| 采集 | Scrapy、scrapy-playwright、trafilatura、Google News URL 解析、Playwright 社媒采集 |
 | 缓存 | Redis（仅搜索缓存，可关闭） |
 
 ## 目录结构
@@ -45,18 +52,19 @@ goodnews 接收一个新闻链接或一段文本，通过 LangGraph 编排
 D:\goodnews
 ├─ backend/
 │  ├─ app/
-│  │  ├─ api/v1/                 # health / factcheck / search / graph 路由
+│  │  ├─ api/v1/                 # health / factcheck / search / social / graph 路由
 │  │  ├─ core/                   # pydantic-settings + URL 安全校验
 │  │  ├─ db/                     # async engine、表、历史仓库
 │  │  ├─ llm/                    # 唯一 OpenAI SDK 网关
-│  │  ├─ models/                 # API / LLM / 状态 Pydantic 模型
+│  │  ├─ models/                 # API / LLM / 状态 / 社媒 Pydantic 模型
 │  │  ├─ graph/                  # state、prompts、nodes、builder、guardrails
 │  │  ├─ knowledge_graph/        # Neo4j repository、verifier、seed data
 │  │  ├─ crawler/                # Scrapy spider、runner、trafilatura
-│  │  ├─ services/               # 业务编排、搜索、证据、缓存
+│  │  ├─ platforms/              # 小红书/抖音/Bilibili 适配器 + 登录态
+│  │  ├─ services/               # 业务编排、搜索、证据、社媒、缓存
 │  │  └─ main.py
-│  ├─ scripts/                   # seed_graph.py、check_llm.py
-│  ├─ tests/                     # 10 个后端测试
+│  ├─ scripts/                   # seed_graph.py、check_llm.py、social_login.py
+│  ├─ tests/                     # 15 个后端测试
 │  ├─ pyproject.toml
 │  └─ README.md
 ├─ frontend/
@@ -108,10 +116,10 @@ D:\Python3.11\python.exe -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 ..\scripts\start-neo4j.bat
 .venv\Scripts\python.exe -m scripts.seed_graph
-.venv\Scripts\uvicorn.exe app.main:app --reload --host 127.0.0.1 --port 8000
+.venv\Scripts\uvicorn.exe app.main:app --host 127.0.0.1 --port 8010
 ```
 
-API 文档：<http://127.0.0.1:8000/docs>
+API 文档：<http://127.0.0.1:8010/docs>
 
 ### 3. 前端
 
@@ -121,7 +129,7 @@ npm install
 npm run dev
 ```
 
-打开 <http://127.0.0.1:5173>。Vite 已把 `/api` 代理到 `127.0.0.1:8000`。
+打开 <http://127.0.0.1:5173>。Vite 已把 `/api` 代理到 `127.0.0.1:8010`。
 
 ### 桌面一键启动（推荐）
 
@@ -146,7 +154,7 @@ npm run dev
 
 | 分组 | 变量 |
 |------|------|
-| 应用 | `APP_NAME` `APP_ENV` `DEBUG` `API_PREFIX` `CORS_ORIGINS` |
+| 应用 | `APP_NAME` `APP_ENV` `DEBUG` `API_PREFIX` `CORS_ORIGINS` `BACKEND_HOST` `BACKEND_PORT` |
 | PostgreSQL | `POSTGRES_HOST` `POSTGRES_PORT` `POSTGRES_DB` `POSTGRES_USER` `POSTGRES_PASSWORD` `DATABASE_ENABLED` `DATABASE_ECHO` `DATABASE_URL`（可选覆盖） |
 | Redis | `REDIS_URL` `REDIS_ENABLED` `CACHE_TTL_SECONDS` |
 | Neo4j | `NEO4J_URI` `NEO4J_USER` `NEO4J_PASSWORD` `NEO4J_DATABASE` `NEO4J_ENABLED` |
@@ -154,6 +162,7 @@ npm run dev
 | 核查 | `FACTCHECK_MAX_EVIDENCE_ROUNDS` `MAX_CLAIMS` `MAX_ARTICLE_CHARS` `MAX_FACTCHECK_INPUT_CHARS` `EVIDENCE_FETCH_TOP_N` |
 | 搜索 | `SEARCH_PROVIDER`（`google_news_rss` / `bing_rss`）`SEARCH_RESULT_LIMIT` `SEARCH_TIMEOUT_SECONDS` |
 | 爬虫 | `CRAWLER_TIMEOUT_SECONDS` `CRAWLER_PLAYWRIGHT_ENABLED` `PLAYWRIGHT_TIMEOUT_MS` `PLAYWRIGHT_BROWSER_CHANNEL` `ALLOW_PRIVATE_URLS` |
+| 社媒采集 | `SOCIAL_BROWSER_HEADLESS` `SOCIAL_BROWSER_TIMEOUT_MS` `SOCIAL_STATE_DIR` `SOCIAL_MAX_COMMENTS_DEFAULT` `XHS_COOKIE` `DOUYIN_COOKIE` `BILIBILI_COOKIE` |
 | 本机推送凭据 | `GITHUB_TOKEN` `GITEE_TOKEN`（仅本地 `.env`，应用不读取） |
 
 ## API
@@ -166,12 +175,14 @@ npm run dev
 | GET | `/api/v1/factcheck/{id}` | 单次核查完整结果 |
 | POST | `/api/v1/search` | 关键词新闻搜索 |
 | GET | `/api/v1/search/hot` | 热点新闻 |
+| GET | `/api/v1/social/platforms` | 三平台能力与登录要求 |
+| POST | `/api/v1/social/fetch` | 获取社媒内容详情 + 评论 |
 | GET | `/api/v1/graph/stats` | Neo4j 实体/关系规模 |
 
 ### 核查示例
 
 ```bat
-curl.exe -X POST http://127.0.0.1:8000/api/v1/factcheck ^
+curl.exe -X POST http://127.0.0.1:8010/api/v1/factcheck ^
   -H "Content-Type: application/json" ^
   -d "{\"input_type\":\"text\",\"content\":\"埃菲尔铁塔位于柏林。\",\"max_evidence_rounds\":0}"
 ```
@@ -179,10 +190,26 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/factcheck ^
 ### 搜索示例
 
 ```bat
-curl.exe -X POST http://127.0.0.1:8000/api/v1/search ^
+curl.exe -X POST http://127.0.0.1:8010/api/v1/search ^
   -H "Content-Type: application/json" ^
   -d "{\"query\":\"人工智能\",\"limit\":5}"
 ```
+
+### 社媒采集示例
+
+```bat
+curl.exe -X POST http://127.0.0.1:8010/api/v1/social/fetch ^
+  -H "Content-Type: application/json" ^
+  -d "{\"url\":\"https://www.bilibili.com/video/BV1gHWg6GEqj\",\"max_comments\":20,\"include_replies\":true}"
+```
+
+平台差异：
+
+- **Bilibili**：直接调用公开 API，不需要浏览器；匿名接口可能只返回部分热门评论，配置 `BILIBILI_COOKIE` 可提升完整度。
+- **抖音**：用 Playwright + 本机 Edge 打开公开视频页，读取页面自身的详情/评论 JSON；大多数公开视频无需登录。
+- **小红书**：匿名访问会触发登录/安全验证。先双击 `scripts\social-login.bat xiaohongshu`，用 Edge 扫码登录；登录态保存在 `backend\.browser-profiles\xiaohongshu.json`（已 gitignore）。
+
+社媒采集会写入 PostgreSQL 的 `social_fetch_records` 快照表。
 
 ## 各模块验证方式
 
@@ -193,9 +220,13 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/search ^
 | 图谱种子 | `.venv\Scripts\python.exe -m scripts.seed_graph`，应输出 `entities=41, relations=30` |
 | 图谱确定性校验 | 提交 `埃菲尔铁塔位于柏林。`，应返回 `verdict=false` 且 `graph.status=contradicted` |
 | 搜索 | `GET /api/v1/search/hot?limit=3` 或 `POST /api/v1/search` |
+| 社媒平台能力 | `GET /api/v1/social/platforms` |
+| Bilibili 采集 | `POST /api/v1/social/fetch`，body 中的 URL 使用 B 站视频链接 |
+| 抖音采集 | 同上，使用抖音视频链接；首次会启动 Edge |
+| 小红书登录态 | 先运行 `scripts\social-login.bat xiaohongshu`，再用小红书链接调接口 |
 | 爬虫 | `.venv\Scripts\python.exe -m app.crawler.runner --url <公开文章URL> --output crawler-output.json` |
 | 数据库历史 | `GET /api/v1/factcheck/history` |
-| 后端测试 | `.venv\Scripts\python.exe -m pytest -q` → **10 passed** |
+| 后端测试 | `.venv\Scripts\python.exe -m pytest -q` → **15 passed** |
 | 后端静态检查 | `.venv\Scripts\ruff.exe check app scripts tests` → all checks passed |
 | 前端类型检查 | `cd frontend && npm run typecheck` |
 | 前端生产构建 | `npm run build` |
@@ -219,6 +250,8 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/search ^
 - `factcheck_records.result` 以 JSONB 保存完整快照；后期拆分 claims/evidence 关系表做统计。
 - `article_embeddings` 与 pgvector 只建表不查询；后期才做语义去重。
 - 按要求不含登录/JWT；公开部署前必须补认证、限流、审计与 URL 重定向深度防护。
+- 社媒采集受平台风控影响：Bilibili 匿名接口只返回部分热门评论；抖音依赖页面结构；小红书必须有登录态。
+- 社媒采集当前只支持按内容 URL 采集，不支持按关键词跨平台搜索/热榜抓取。
 - 前端未做 SSR/PWA/桌面端，符合本期范围。
 
 ## 设计与验证记录

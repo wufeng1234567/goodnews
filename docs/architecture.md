@@ -41,6 +41,24 @@ Vue view / components
    - confidence is capped when the graph has no usable relation.
 4. Per-claim verdicts must exist; missing ones are filled as insufficient.
 
+## Social content + comment ingestion
+
+```text
+URL / share text
+  -> platform detection (XHS / Douyin / Bilibili)
+  -> Bilibili public API
+     OR Playwright page + captured native XHR JSON (Douyin / XHS)
+  -> normalized SocialContent + SocialComment[]
+  -> PostgreSQL social_fetch_records (JSONB snapshot)
+```
+
+- Xiaohongshu may require a local login storage state; the API returns
+  `platform_auth_required` instead of faking anonymous access.
+- Douyin uses the page's own signed requests; no signature algorithm is copied.
+- Bilibili uses public web APIs and supports nested first-level replies.
+- Content metrics (views, likes, comments, shares, collects, coins, danmaku)
+  are platform-specific and nullable.
+
 ## Explicit MVP boundaries
 
 - No login/JWT, no Celery, no multi-agent, no vector semantic dedupe.

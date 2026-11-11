@@ -1,7 +1,10 @@
 """goodnews FastAPI entrypoint.
 
 Run from backend/:
-    .venv\\Scripts\\uvicorn app.main:app --reload --port 8000
+    .venv\\Scripts\\uvicorn app.main:app --host 127.0.0.1 --port 8010
+
+Reload mode is intentionally avoided for the main launcher because Playwright
+is not reliable in a uvicorn --reload child process on Windows.
 """
 
 from __future__ import annotations
@@ -33,8 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         container: AppContainer = await build_container(resolved_settings)
         app.state.container = container
         logger.info(
-            "Ready at %s%s/health | graph=%s",
-            "http://127.0.0.1:8000",
+            "Application ready | health=%s/health | graph=%s",
             resolved_settings.api_prefix,
             "connected" if container.graph_repository.available else "unavailable",
         )
@@ -48,7 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="goodnews API",
         version="0.1.0",
         description=(
-            "新闻热点搜索、信息探索与假新闻分析 MVP。"
+            "新闻热点搜索、信息探索、假新闻分析与社媒内容/评论采集 MVP。"
             "LangGraph orchestrates fetch -> claims -> evidence -> graph verify -> adjudicate."
         ),
         lifespan=lifespan,

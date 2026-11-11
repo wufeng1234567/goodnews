@@ -5,7 +5,17 @@ cd /d "%~dp0.."
 
 set "OPEN_BROWSER=1"
 if /I "%~1"=="--no-browser" set "OPEN_BROWSER=0"
-set "HEALTH_URL=http://127.0.0.1:8000/api/v1/health"
+
+set "BACKEND_HOST=127.0.0.1"
+set "BACKEND_PORT=8010"
+if exist ".env" (
+  for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
+    if /I "%%A"=="BACKEND_HOST" set "BACKEND_HOST=%%B"
+    if /I "%%A"=="BACKEND_PORT" set "BACKEND_PORT=%%B"
+  )
+)
+set "API_BASE=http://%BACKEND_HOST%:%BACKEND_PORT%"
+set "HEALTH_URL=%API_BASE%/api/v1/health"
 set "WEB_URL=http://127.0.0.1:5173"
 
 echo ==================================================
@@ -79,7 +89,7 @@ echo [4/4] Opening goodnews...
 if "%OPEN_BROWSER%"=="1" start "" "%WEB_URL%"
 echo [DONE] goodnews is ready.
 echo        Web UI:   %WEB_URL%
-echo        API docs: http://127.0.0.1:8000/docs
+echo        API docs: %API_BASE%/docs
 echo.
 echo You can close this launcher. Backend/frontend windows keep running.
 ping 127.0.0.1 -n 6 >nul
